@@ -56,7 +56,7 @@
   </div>
 </header>
 
-<main class="layout">
+<main id="layout" class="layout">
 
   <!-- ---------------- Left: editor ---------------- -->
   <section class="panel panel-left" aria-label="Editor">
@@ -94,14 +94,17 @@
     </div>
 
     <div class="tab-panel" data-panel="transitions">
-      <div class="field-grid">
-        <label>From<select id="select-source"></select></label>
-        <label>Symbol<select id="select-symbol"></select></label>
-        <label>To<select id="select-target"></select></label>
+      <div class="ttable-bar">
+        <label class="check" id="label-show-epsilon" title="Show a column for ε-transitions">
+          <input id="toggle-epsilon" type="checkbox"> Show ε column
+        </label>
+        <span class="ttable-legend"><b class="mark-start">→</b> start · <b class="mark-accept">*</b> accepting</span>
       </div>
-      <button id="btn-add-transition">Add transition</button>
-      <ul id="list-transitions" class="item-list tall" aria-label="Transitions"></ul>
-      <button id="btn-remove-transition" class="danger" disabled>Delete transition</button>
+      <div id="ttable-scroll" class="ttable-scroll">
+        <table id="ttable" class="ttable" aria-label="Transition table"></table>
+      </div>
+      <p id="ttable-message" class="ttable-message" role="alert" hidden></p>
+      <p class="hint">Click a cell and type its targets, e.g. <code>q1, q2</code>; Enter saves, Esc cancels, an empty cell has no transition. Click <b>→</b> or <b>*</b> on a row to set the start state or toggle accepting.</p>
     </div>
   </section>
 
@@ -119,7 +122,7 @@
       <svg id="canvas" role="img" aria-label="Automaton diagram"></svg>
       <div id="canvas-empty" class="canvas-empty">
         <p><strong>No states yet.</strong></p>
-        <p>Add one in the States tab, or load an example from the toolbar.</p>
+        <p>Add one in the States tab (or with <em>+ state</em> in the Transitions table), or load an example from the toolbar.</p>
       </div>
     </div>
     <div class="legend">
@@ -188,14 +191,14 @@
   <ol>
     <li><strong>States</strong> — add them in the left panel. Select one to set it as the start state, mark it as accepting, rename or delete it.</li>
     <li><strong>Alphabet</strong> — add the symbols the automaton reads. One character each.</li>
-    <li><strong>Transitions</strong> — pick a source, a symbol (ε included) and a target. Parallel symbols between the same two states share one arrow.</li>
+    <li><strong>Transitions</strong> — a transition table: one row per state, one column per symbol. Click a cell and type the target states (<code>q1, q2</code>, commas or spaces); Enter or clicking away saves, Esc cancels, and an empty cell means no transition. Unknown names are refused, never created. Tab, Shift+Tab and the arrow keys move between cells (while typing, ← → leave the cell only at the start/end of the text); Enter edits the focused cell. Click <b>→</b> to make a row the start state and <b>*</b> to toggle accepting; <em>+ state</em> and <em>+ symbol</em> add rows and columns. The ε column appears with ε-transitions or via <em>Show ε column</em>. In a DFA, empty cells are tinted amber as missing transitions. Hovering a cell highlights its arrows on the diagram. Each saved cell is one undo step.</li>
     <li><strong>Canvas</strong> — drag states to rearrange, scroll to zoom, drag the background to pan. Double-click a state to toggle whether it accepts.</li>
     <li><strong>Simulate</strong> — type a string and step through it. Active states and the edges just taken are highlighted in red.</li>
     <li><strong>Convert</strong> — subset construction, DFA minimization and the trivial DFA→NFA view. Each one shows its process; <em>Open in new tab</em> puts the result in its own tab and leaves the original untouched.</li>
     <li><strong>Tabs</strong> — each tab above the canvas holds one automaton with its own undo history, simulation and zoom. <em>+</em> or New opens an empty tab, × closes one. Open, Examples and a full Import open in a new tab (or fill the current one if it is empty). All tabs are saved in this browser automatically and come back when you reload; undo history does not.</li>
     <li><strong>Files</strong> — Save downloads the active tab as a <code>.afjson</code> file, and Open reads the same format back in. Import takes a quick text definition (or pasted <code>.afjson</code>): with a <code>start:</code> line it is a new automaton, without one it is merged into the current tab.</li>
   </ol>
-  <p class="hint">Keyboard: Ctrl+Z undo · Ctrl+Y redo (both act on the active tab) · Enter simulates · ← → step through a simulation · middle-click a tab to close it.</p>
+  <p class="hint">Keyboard: Ctrl+Z undo · Ctrl+Y redo (both act on the active tab) · Enter simulates · ← → step through a simulation (outside the transition table, where they move between cells) · middle-click a tab to close it.</p>
   <form method="dialog"><button class="apply">Close</button></form>
 </dialog>
 
@@ -233,6 +236,7 @@ q1 eps q2      # eps or ε = epsilon"></textarea>
 <script src="js/examples.js"></script>
 <script src="js/import.js"></script>
 <script src="js/documents.js"></script>
+<script src="js/table.js"></script>
 <script src="js/graph.js"></script>
 <script src="js/app.js"></script>
 </body>

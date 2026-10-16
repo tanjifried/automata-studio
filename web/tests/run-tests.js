@@ -14,8 +14,8 @@ const path = require("path");
 const vm = require("vm");
 
 const jsDir = path.join(__dirname, "..", "js");
-const sources = ["automaton.js", "algorithms.js", "layout.js", "examples.js", "import.js", "documents.js"];
-const testFiles = ["algorithms.test.js", "layout.test.js", "import.test.js", "documents.test.js"];
+const sources = ["automaton.js", "algorithms.js", "layout.js", "examples.js", "import.js", "documents.js", "table.js"];
+const testFiles = ["algorithms.test.js", "layout.test.js", "import.test.js", "documents.test.js", "table.test.js"];
 
 // Each test file gets a fresh context so their top-level names cannot clash.
 let failures = 0;

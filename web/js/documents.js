@@ -21,7 +21,7 @@ function createDocument(id, automaton, view) {
     automaton: automaton || new Automaton({ name: DEFAULT_DOCUMENT_NAME }),
     undoStack: [],
     redoStack: [],
-    selection: { state: null, symbol: null, transition: null },
+    selection: { state: null, symbol: null },
     sim: { input: "", result: null, index: 0 },
     view: view || null, // { scale, offsetX, offsetY } or null = fit on show
   };

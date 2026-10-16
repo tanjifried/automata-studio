@@ -21,6 +21,18 @@ Forked from [ReyEscarlata0/automata-studio](https://github.com/ReyEscarlata0/aut
 
 **Editing**
 - Visual editor for states, alphabet and transitions, with ε-transitions
+- **Editable transition table**: one row per state, one column per symbol.
+  Click a cell and type its targets (`q1, q2`); Enter saves, Esc cancels, an
+  empty cell means no transition, and unknown state names are refused rather
+  than created. Tab and the arrow keys move between cells like a spreadsheet.
+  `→` and `*` on each row set the start state and toggle accepting; `+ state`
+  and `+ symbol` add rows and columns. The ε column appears when there are
+  ε-transitions (or on request). In a DFA, empty cells are tinted amber as
+  missing transitions. Each saved cell is one undo step
+- The table is linked to the diagram: hovering a cell highlights its arrows,
+  clicking a state highlights its row, and a running simulation highlights the
+  active rows and the column of the symbol being read. The editor panel widens
+  while the table is open
 - Interactive canvas: drag states, zoom with the scroll wheel, pan
 - **Auto-sort**: a layered left-to-right layout by distance from the start
   state, with fewer edge crossings; unreachable and dead states go in the last
@@ -106,9 +118,10 @@ automata-studio/
     │   ├── examples.js      # Preloaded example automata
     │   ├── import.js        # Import dialog parser (text and .afjson) and merge
     │   ├── documents.js     # Open tabs: per-tab history, autosave (no DOM)
+    │   ├── table.js         # Transition table: cell parsing, diffing, column rules (no DOM)
     │   ├── graph.js         # SVG renderer: drag, zoom, pan, edge routing
     │   └── app.js           # UI wiring, tabs, file I/O, export
-    └── tests/               # Node test suite (algorithms, layout, import, tabs)
+    └── tests/               # Node test suite (algorithms, layout, import, tabs, table)
 ```
 
 The algorithm layer is deliberately pure: it takes an automaton and returns a
@@ -137,7 +150,7 @@ no modules or fetch calls that would trip over the `file://` origin.
 ## Tests
 
 ```bash
-node web/tests/run-tests.js      # 249 checks in 4 suites
+node web/tests/run-tests.js      # 308 checks in 5 suites
 ```
 
 | Suite | Checks |
@@ -146,6 +159,7 @@ node web/tests/run-tests.js      # 249 checks in 4 suites
 | `layout.test.js` | 32 |
 | `import.test.js` | 102 |
 | `documents.test.js` | 70 |
+| `table.test.js` | 59 |
 
 ---
 

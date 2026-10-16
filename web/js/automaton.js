@@ -23,6 +23,29 @@ function symbolProblem(symbol) {
   return null;
 }
 
+/**
+ * Why `name` cannot be added as a new state (or be the new name of `current`),
+ * or null when it can. Shared by the States tab and the transition table.
+ */
+function stateNameProblem(name, states, current) {
+  if (!name) return "The state name cannot be empty.";
+  if (!STATE_NAME_RE.test(name)) return "Only letters, digits, '_' and '-' are allowed.";
+  if (name !== current && (states || []).indexOf(name) !== -1) {
+    return 'State "' + name + '" already exists.';
+  }
+  return null;
+}
+
+/** Why `symbol` cannot be added to `alphabet`, or null when it can. */
+function newSymbolProblem(symbol, alphabet) {
+  const problem = symbolProblem(symbol);
+  if (problem) return problem;
+  if ((alphabet || []).indexOf(symbol) !== -1) {
+    return 'Symbol "' + symbol + '" is already in the alphabet.';
+  }
+  return null;
+}
+
 /* ------------------------------------------------------------------ */
 /* Small set helpers (JS Set has no union/intersection operators)     */
 /* ------------------------------------------------------------------ */

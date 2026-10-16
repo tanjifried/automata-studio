@@ -174,6 +174,32 @@ input[type="text"]:focus, select:focus {
   grid-template-columns: 272px minmax(0, 1fr) 320px;
   gap: 10px;
   padding: 10px;
+  transition: grid-template-columns 0.25s ease;
+}
+
+/*
+ * While the Transitions tab is open the editor panel grows to fit the table
+ * (--table-w is measured by app.js), within limits that leave the diagram
+ * usable; wider tables scroll inside the panel.
+ */
+@media (min-width: 1181px) {
+  .layout.table-mode {
+    grid-template-columns:
+      clamp(272px, min(var(--table-w, 272px), 45vw, 100vw - 860px), 720px)
+      minmax(0, 1fr) 320px;
+  }
+}
+
+@media (min-width: 821px) and (max-width: 1180px) {
+  .layout.table-mode {
+    grid-template-columns:
+      clamp(250px, min(var(--table-w, 250px), 55vw, 100vw - 420px), 640px)
+      minmax(0, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .layout { transition: none; }
 }
 
 .panel {
@@ -210,7 +236,8 @@ input[type="text"]:focus, select:focus {
 
 .tab:hover:not(.active) { background: transparent; color: var(--text); }
 
-.tab.active {
+.tab.active,
+.tab.active:hover:not(:disabled) {
   background: var(--panel);
   color: var(--accent);
   border-bottom-color: var(--accent);
@@ -232,23 +259,6 @@ input[type="text"]:focus, select:focus {
 
 .field-row { display: flex; gap: 6px; }
 .field-row input { flex: 1; }
-
-.field-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 8px;
-}
-
-.field-grid label {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-dim);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
 
 .button-row { display: flex; gap: 6px; }
 .button-row button { flex: 1; font-size: 12px; padding: 6px 8px; }
@@ -274,8 +284,6 @@ input[type="text"]:focus, select:focus {
   border-radius: 6px;
   background: var(--bg);
 }
-
-.item-list.tall { max-height: 320px; }
 
 .item-list li {
   display: flex;
@@ -320,6 +328,188 @@ input[type="text"]:focus, select:focus {
 }
 
 .empty-note:hover { background: transparent; }
+
+/* ------------------------ Transition table ----------------------- */
+
+.ttable-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 12px;
+  flex-wrap: wrap;
+  font-size: 12px;
+}
+
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.check input { margin: 0; accent-color: var(--accent); }
+.check.forced { color: var(--text-dim); cursor: default; }
+
+.ttable-legend { color: var(--text-dim); font-size: 11.5px; }
+.ttable-legend b { font-weight: 800; }
+.ttable-legend .mark-start { color: var(--warn); }
+.ttable-legend .mark-accept { color: var(--ok); }
+
+.ttable-scroll {
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+}
+
+.ttable {
+  --sim: #e0483e;
+  --hover: #8e5ad8;
+  width: max-content;
+  min-width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.ttable th,
+.ttable td {
+  height: 30px;
+  padding: 0;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.ttable thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 4px 10px;
+  background: var(--panel-alt);
+  font-weight: 650;
+  text-align: center;
+}
+
+.ttable thead th.col-head { min-width: 58px; font-size: 13px; }
+
+.ttable thead th.eps { color: var(--accent); }
+.ttable thead th.corner { left: 0; z-index: 3; color: var(--text-dim); font-style: italic; }
+.ttable thead th.add-col { padding: 3px 6px; border-right: none; }
+
+.ttable .row-head {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  padding: 0 8px 0 3px;
+  background: var(--panel);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.ttable td.cell {
+  min-width: 58px;
+  padding: 4px 10px;
+  background: var(--panel);
+  text-align: center;
+  white-space: nowrap;
+  cursor: text;
+}
+
+.ttable td.filler { border-right: none; background: transparent; }
+.ttable tr.add-row th,
+.ttable tr.add-row td { border-bottom: none; background: var(--bg); }
+.ttable tr.add-row .row-head { padding: 3px 6px; }
+.ttable td.empty-note { padding: 4px 10px; text-align: left; }
+
+/* Row header: → start, * accepting, then the state's name. */
+.ttable button.mark,
+.ttable button.state-name {
+  padding: 2px 3px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-dim);
+  font-weight: 800;
+}
+
+.ttable button.mark { min-width: 20px; opacity: 0.3; font-size: 16px; line-height: 1; }
+.ttable button.mark:hover:not(:disabled) { opacity: 0.85; background: var(--panel-alt); }
+.ttable button.mark.on { opacity: 1; }
+.ttable button.mark-start.on { color: var(--warn); }
+.ttable button.mark-accept.on { color: var(--ok); }
+
+.ttable button.state-name {
+  margin-left: 2px;
+  padding: 2px 5px;
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 650;
+}
+
+.ttable button.state-name:hover:not(:disabled) { background: var(--panel-alt); }
+
+.ttable tr.selected .row-head {
+  background: var(--accent-soft);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.ttable tr.selected button.state-name { color: var(--accent); }
+
+input.ttable-add { width: 82px; padding: 3px 6px; font-size: 12px; }
+
+/* Cells */
+.ttable td.cell .empty { color: var(--text-dim); opacity: 0.6; }
+.ttable td.cell.missing { background: color-mix(in srgb, var(--warn) 17%, var(--panel)); }
+.ttable td.cell.missing .empty { color: var(--warn); opacity: 1; }
+.ttable td.cell:hover { box-shadow: inset 0 0 0 2px var(--hover); }
+.ttable td.cell:focus { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+.ttable td.cell.error {
+  background: color-mix(in srgb, var(--danger) 14%, var(--panel));
+  color: var(--danger);
+  box-shadow: inset 0 0 0 2px var(--danger);
+  text-decoration: underline wavy;
+  text-underline-offset: 3px;
+}
+
+.ttable td.cell.editing { padding: 0; }
+
+.ttable input.cell-input {
+  display: block;
+  min-width: 100%;
+  height: 29px;
+  padding: 2px 8px;
+  border: none;
+  border-radius: 0;
+  background: var(--canvas-bg);
+  box-shadow: inset 0 0 0 2px var(--accent);
+  font-size: 12.5px;
+  text-align: center;
+}
+
+.ttable input.cell-input:focus { box-shadow: inset 0 0 0 2px var(--accent); }
+.ttable input.cell-input.invalid,
+.ttable input.cell-input.invalid:focus {
+  color: var(--danger);
+  box-shadow: inset 0 0 0 2px var(--danger);
+  background: color-mix(in srgb, var(--danger) 10%, var(--canvas-bg));
+}
+
+/* Simulation: active rows, the column being read, and where they meet. */
+.ttable tr.sim-row .row-head,
+.ttable tr.sim-row td.cell { background: color-mix(in srgb, var(--sim) 13%, var(--panel)); }
+.ttable thead th.sim-col { background: color-mix(in srgb, var(--sim) 26%, var(--panel-alt)); color: var(--sim); }
+.ttable td.cell.sim-col { background: color-mix(in srgb, var(--sim) 9%, var(--panel)); }
+.ttable td.cell.sim-cell {
+  background: color-mix(in srgb, var(--sim) 30%, var(--panel));
+  box-shadow: inset 0 0 0 2px var(--sim);
+  font-weight: 700;
+}
+
+.ttable-message { margin: 0; color: var(--danger); font-size: 12px; }
 
 /* ---------------------------- Canvas ----------------------------- */
 

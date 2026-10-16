@@ -94,7 +94,7 @@
     const selection = sel();
     selection.state = null;
     selection.symbol = null;
-    selection.transition = null;
+    tableUi.error = null;
     resetSimulation();
     graph.automaton = doc().automaton;
     graph.selectedState = null;
@@ -119,8 +119,7 @@
 
     renderStatesList(report);
     renderAlphabetList();
-    renderTransitionSelects();
-    renderTransitionsList();
+    renderTable();
     renderProperties(report);
     renderBadge();
 
@@ -199,58 +198,6 @@
     }
   }
 
-  function renderTransitionSelects() {
-    const automaton = doc().automaton;
-    const source = $("select-source");
-    const target = $("select-target");
-    const symbol = $("select-symbol");
-
-    const prevSource = source.value;
-    const prevTarget = target.value;
-    const prevSymbol = symbol.value;
-
-    const stateOptions = automaton.states
-      .map((s) => '<option value="' + escapeHtml(s) + '">' + escapeHtml(s) + "</option>")
-      .join("");
-    source.innerHTML = stateOptions;
-    target.innerHTML = stateOptions;
-
-    symbol.innerHTML = automaton.alphabet
-      .map((s) => '<option value="' + escapeHtml(s) + '">' + escapeHtml(s) + "</option>")
-      .join("") + '<option value="' + EPSILON + '">' + EPSILON + " (epsilon)</option>";
-
-    if (automaton.states.indexOf(prevSource) !== -1) source.value = prevSource;
-    if (automaton.states.indexOf(prevTarget) !== -1) target.value = prevTarget;
-    if (prevSymbol === EPSILON || automaton.alphabet.indexOf(prevSymbol) !== -1) {
-      symbol.value = prevSymbol;
-    }
-  }
-
-  function renderTransitionsList() {
-    const automaton = doc().automaton;
-    const list = $("list-transitions");
-    list.textContent = "";
-    const rows = automaton.allTransitionRows();
-    if (!rows.length) {
-      list.innerHTML = '<li class="empty-note">No transitions yet</li>';
-      return;
-    }
-    for (const row of rows) {
-      const key = row.join(KEY_SEP);
-      const li = document.createElement("li");
-      if (key === sel().transition) li.classList.add("selected");
-      li.innerHTML =
-        "<span><code>" + escapeHtml(row[0]) + "</code> —" +
-        escapeHtml(row[1]) + "→ <code>" + escapeHtml(row[2]) + "</code></span>";
-      li.addEventListener("click", () => {
-        sel().transition = key;
-        renderTransitionsList();
-        updateEditorButtons();
-      });
-      list.appendChild(li);
-    }
-  }
-
   function yesNo(value) {
     return '<span class="prop-value ' + (value ? "yes" : "no") + '">' +
       (value ? "Yes" : "No") + "</span>";
@@ -317,7 +264,7 @@
 
   function updateEditorButtons() {
     const automaton = doc().automaton;
-    const { state: selectedState, symbol: selectedSymbol, transition: selectedTransition } = sel();
+    const { state: selectedState, symbol: selectedSymbol } = sel();
     const hasState = selectedState !== null && automaton.states.indexOf(selectedState) !== -1;
     $("btn-set-start").disabled = !hasState;
     $("btn-toggle-accept").disabled = !hasState;
@@ -326,30 +273,20 @@
 
     $("btn-remove-symbol").disabled =
       selectedSymbol === null || automaton.alphabet.indexOf(selectedSymbol) === -1;
-
-    const rows = automaton.allTransitionRows().map((r) => r.join(KEY_SEP));
-    $("btn-remove-transition").disabled =
-      selectedTransition === null || rows.indexOf(selectedTransition) === -1;
-
-    $("btn-add-transition").disabled = !automaton.states.length;
   }
 
   /* ---------------------------------------------------------------- */
   /* Editor actions                                                    */
   /* ---------------------------------------------------------------- */
 
-  function addState() {
+  /** Add a state (States tab or the table's "+ state"); false if refused. */
+  function createState(name) {
     const automaton = doc().automaton;
-    const input = $("input-state");
-    const name = input.value.trim();
-    if (!name) return toast("The state name cannot be empty.", "error");
-    if (!STATE_NAME_RE.test(name)) {
-      return toast("Only letters, digits, '_' and '-' are allowed.", "error");
+    const problem = stateNameProblem(name, automaton.states);
+    if (problem) {
+      toast(problem, "error");
+      return false;
     }
-    if (automaton.states.indexOf(name) !== -1) {
-      return toast('State "' + name + '" already exists.', "error");
-    }
-
     pushHistory();
     // Drop new states near the centre of the current view.
     const rect = $("canvas").getBoundingClientRect();
@@ -357,9 +294,14 @@
     const y = (rect.height / 2 - graph.offsetY) / graph.scale + (Math.random() * 60 - 30);
     automaton.addState(name, [x, y]);
     sel().state = name;
-    input.value = "";
     resetSimulation();
     refresh();
+    return true;
+  }
+
+  function addState() {
+    const input = $("input-state");
+    if (createState(input.value.trim())) input.value = "";
   }
 
   function removeState() {
@@ -380,13 +322,8 @@
     const next = window.prompt("New name for state " + current + ":", current);
     if (next === null) return;
     const name = next.trim();
-    if (!name) return toast("The state name cannot be empty.", "error");
-    if (!STATE_NAME_RE.test(name)) {
-      return toast("Only letters, digits, '_' and '-' are allowed.", "error");
-    }
-    if (name !== current && automaton.states.indexOf(name) !== -1) {
-      return toast('State "' + name + '" already exists.', "error");
-    }
+    const problem = stateNameProblem(name, automaton.states, current);
+    if (problem) return toast(problem, "error");
     pushHistory();
     automaton.renameState(current, name);
     selection.state = name;
@@ -394,11 +331,11 @@
     refresh();
   }
 
-  function setStartState() {
-    const state = sel().state;
-    if (!state) return;
+  function setStartState(state) {
+    const target = state || sel().state;
+    if (!target || doc().automaton.startState === target) return;
     pushHistory();
-    doc().automaton.setStartState(state);
+    doc().automaton.setStartState(target);
     resetSimulation();
     refresh();
   }
@@ -412,20 +349,24 @@
     refresh();
   }
 
-  function addSymbol() {
+  /** Add a symbol (Alphabet tab or the table's "+ symbol"); false if refused. */
+  function createSymbol(symbol) {
     const automaton = doc().automaton;
-    const input = $("input-symbol");
-    const symbol = input.value.trim();
-    const problem = symbolProblem(symbol);
-    if (problem) return toast(problem, "error");
-    if (automaton.alphabet.indexOf(symbol) !== -1) {
-      return toast('Symbol "' + symbol + '" is already in the alphabet.', "error");
+    const problem = newSymbolProblem(symbol, automaton.alphabet);
+    if (problem) {
+      toast(problem, "error");
+      return false;
     }
     pushHistory();
     automaton.addSymbol(symbol);
-    input.value = "";
     resetSimulation();
     refresh();
+    return true;
+  }
+
+  function addSymbol() {
+    const input = $("input-symbol");
+    if (createSymbol(input.value.trim())) input.value = "";
   }
 
   function removeSymbol() {
@@ -438,32 +379,599 @@
     refresh();
   }
 
-  function addTransition() {
-    const source = $("select-source").value;
-    const symbol = $("select-symbol").value;
-    const target = $("select-target").value;
-    if (!source || !target) return toast("Create at least one state first.", "error");
-    try {
-      pushHistory();
-      doc().automaton.addTransition(source, symbol, target);
-      resetSimulation();
-      refresh();
-    } catch (err) {
-      doc().undoStack.pop();
-      updateHistoryButtons();
-      toast(err.message, "error");
+  /* ---------------------------------------------------------------- */
+  /* Transition table                                                  */
+  /* ---------------------------------------------------------------- */
+
+  // UI state of the table; the model edits go through table.js + pushHistory.
+  // Cells are identified by { state, symbol } so they survive a re-render.
+  const tableUi = {
+    showEpsilon: false, // the "Show ε column" toggle (forced on by ε-transitions)
+    focus: null,        // the cell with the roving tabindex
+    editing: null,      // { state, symbol, input } while a cell editor is open
+    error: null,        // { state, symbol, text, message }: a refused edit
+    hover: null,        // the cell under the mouse
+    lastSelected: null, // last selected state scrolled into view
+    rows: new Map(),    // state -> <tr>
+    cells: new Map(),   // cellKey -> <td>
+    columns: [],        // symbols currently shown, ε last
+  };
+
+  const cellKey = (state, symbol) => state + KEY_SEP + symbol;
+  const sameCell = (a, b) => Boolean(a && b && a.state === b.state && a.symbol === b.symbol);
+
+  function cellLabel(state, symbol) {
+    return "δ(" + state + ", " + symbol + ")";
+  }
+
+  function renderTable() {
+    const automaton = doc().automaton;
+    const table = $("ttable");
+    const active = document.activeElement;
+    const hadCellFocus = table.contains(active) && !(active && /^ttable-add-/.test(active.id));
+    const refocusId = active && /^ttable-add-/.test(active.id) ? active.id : null;
+    tableUi.editing = null; // any open editor is discarded with the old DOM
+
+    const columns = tableColumns(automaton, tableUi.showEpsilon);
+    tableUi.columns = columns.symbols;
+    const toggle = $("toggle-epsilon");
+    toggle.checked = columns.epsilon;
+    toggle.disabled = columns.epsilonForced;
+    $("label-show-epsilon").classList.toggle("forced", columns.epsilonForced);
+    $("label-show-epsilon").title = columns.epsilonForced
+      ? "Always shown: this automaton has ε-transitions"
+      : "Show a column for ε-transitions";
+
+    const shown = (cell) => Boolean(cell) && automaton.states.indexOf(cell.state) !== -1 &&
+      columns.symbols.indexOf(cell.symbol) !== -1;
+    if (!shown(tableUi.focus)) tableUi.focus = null;
+    if (!shown(tableUi.error)) tableUi.error = null;
+    if (!shown(tableUi.hover)) tableUi.hover = null;
+
+    table.textContent = "";
+    tableUi.rows = new Map();
+    tableUi.cells = new Map();
+
+    const headRow = table.createTHead().insertRow();
+    const corner = document.createElement("th");
+    corner.className = "corner";
+    corner.textContent = "δ";
+    corner.title = "Rows: states · columns: symbols";
+    headRow.appendChild(corner);
+    for (const symbol of columns.symbols) {
+      const th = document.createElement("th");
+      th.className = "col-head" + (symbol === EPSILON ? " eps" : "");
+      th.dataset.symbol = symbol;
+      th.scope = "col";
+      th.textContent = symbol;
+      headRow.appendChild(th);
+    }
+    const addCol = document.createElement("th");
+    addCol.className = "add-col";
+    addCol.appendChild(tableAddInput("ttable-add-symbol", "+ symbol", 1,
+      "Add a symbol (one character) and press Enter"));
+    headRow.appendChild(addCol);
+
+    const body = table.createTBody();
+    for (const state of automaton.states) {
+      const tr = body.insertRow();
+      tr.dataset.state = state;
+      if (state === sel().state) tr.classList.add("selected");
+      tr.appendChild(rowHeader(automaton, state));
+      for (const symbol of columns.symbols) {
+        const td = tr.insertCell();
+        td._cell = { state: state, symbol: symbol };
+        td.tabIndex = -1;
+        renderCellContent(td);
+        tableUi.cells.set(cellKey(state, symbol), td);
+      }
+      tr.insertCell().className = "filler";
+      tableUi.rows.set(state, tr);
+    }
+
+    const addRow = body.insertRow();
+    addRow.className = "add-row";
+    const addHead = document.createElement("th");
+    addHead.className = "row-head";
+    addHead.appendChild(tableAddInput("ttable-add-state", "+ state", 20,
+      "Add a state and press Enter"));
+    addRow.appendChild(addHead);
+    const addFill = addRow.insertCell();
+    addFill.className = "filler";
+    addFill.colSpan = columns.symbols.length + 1;
+    if (!automaton.states.length) {
+      addFill.className = "filler empty-note";
+      addFill.textContent = "No states yet — add one here.";
+    } else if (!columns.symbols.length) {
+      addFill.className = "filler empty-note";
+      addFill.textContent = "Add a symbol with + symbol.";
+    }
+
+    // Roving tabindex: one cell is reachable with Tab, the arrows do the rest.
+    const roving = tableUi.focus ? cellTd(tableUi.focus) : tableUi.cells.values().next().value;
+    if (roving) roving.tabIndex = 0;
+    if (hadCellFocus && tableUi.focus) cellTd(tableUi.focus).focus({ preventScroll: true });
+    if (refocusId) $(refocusId).focus();
+
+    applyTableSimHighlight();
+    updateHoverEdges();
+    renderTableMessage();
+    if (sel().state !== tableUi.lastSelected) {
+      tableUi.lastSelected = sel().state;
+      if (sel().state) scrollRowIntoView(tableUi.rows.get(sel().state));
+    }
+    updateTableWidth();
+  }
+
+  function tableAddInput(id, placeholder, maxLength, title) {
+    const input = document.createElement("input");
+    input.type = "text";
+    input.id = id;
+    input.className = "ttable-add";
+    input.placeholder = placeholder;
+    input.maxLength = maxLength;
+    input.autocomplete = "off";
+    input.spellcheck = false;
+    input.title = title;
+    input.setAttribute("aria-label", title);
+    return input;
+  }
+
+  function rowHeader(automaton, state) {
+    const th = document.createElement("th");
+    th.className = "row-head";
+    th.scope = "row";
+    const isStart = automaton.startState === state;
+    const isAccept = automaton.acceptStates.has(state);
+
+    const start = document.createElement("button");
+    start.type = "button";
+    start.className = "mark mark-start" + (isStart ? " on" : "");
+    start.textContent = "→";
+    start.dataset.action = "start";
+    start.title = isStart ? state + " is the start state" : "Make " + state + " the start state";
+    start.setAttribute("aria-pressed", String(isStart));
+
+    const accept = document.createElement("button");
+    accept.type = "button";
+    accept.className = "mark mark-accept" + (isAccept ? " on" : "");
+    accept.textContent = "*";
+    accept.dataset.action = "accept";
+    accept.title = isAccept
+      ? state + " is accepting — click to make it non-accepting"
+      : "Make " + state + " accepting";
+    accept.setAttribute("aria-pressed", String(isAccept));
+
+    const name = document.createElement("button");
+    name.type = "button";
+    name.className = "state-name";
+    name.dataset.action = "select";
+    name.textContent = state;
+    name.title = "Select " + state + " on the diagram";
+
+    th.appendChild(start);
+    th.appendChild(accept);
+    th.appendChild(name);
+    return th;
+  }
+
+  /** (Re)draw one cell from the model, or from a refused edit. */
+  function renderCellContent(td) {
+    const automaton = doc().automaton;
+    const { state, symbol } = td._cell;
+    const simClasses = ["sim-col", "sim-cell"].filter((c) => td.classList.contains(c));
+    td.textContent = "";
+    td.className = "cell" + (symbol === EPSILON ? " eps" : "");
+    for (const c of simClasses) td.classList.add(c);
+    const label = cellLabel(state, symbol);
+
+    if (sameCell(tableUi.error, td._cell)) {
+      td.classList.add("error");
+      td.textContent = tableUi.error.text || " ";
+      td.title = tableUi.error.message + " Click to fix, Esc to discard.";
+      return;
+    }
+    const text = formatCell(automaton, state, symbol);
+    if (text) {
+      td.textContent = text;
+      td.title = label + " = {" + text + "} — click to edit";
+      return;
+    }
+    const empty = document.createElement("span");
+    empty.className = "empty";
+    empty.textContent = "∅";
+    td.appendChild(empty);
+    if (isMissingCell(automaton, state, symbol)) {
+      td.classList.add("missing");
+      td.title = "Missing transition: " + label + " is undefined — click to add one";
+    } else {
+      td.title = label + " = ∅ — click to edit";
     }
   }
 
-  function removeTransition() {
-    const selection = sel();
-    if (!selection.transition) return;
-    const parts = selection.transition.split(KEY_SEP);
+  function cellTd(cell) {
+    return cell ? tableUi.cells.get(cellKey(cell.state, cell.symbol)) || null : null;
+  }
+
+  function renderTableMessage() {
+    const box = $("ttable-message");
+    const error = tableUi.error;
+    box.hidden = !error;
+    box.textContent = error ? cellLabel(error.state, error.symbol) + ": " + error.message : "";
+  }
+
+  function focusCell(cell) {
+    const td = cellTd(cell);
+    if (!td) return;
+    for (const other of tableUi.cells.values()) other.tabIndex = -1;
+    td.tabIndex = 0;
+    tableUi.focus = { state: cell.state, symbol: cell.symbol };
+    td.focus();
+  }
+
+  /** The cell next to `cell`; Tab-style moves (`wrap`) continue on the next row. */
+  function neighbourCell(cell, dRow, dCol, wrap) {
+    const states = doc().automaton.states;
+    const columns = tableUi.columns;
+    let row = states.indexOf(cell.state);
+    let col = columns.indexOf(cell.symbol) + dCol;
+    if (wrap && col >= columns.length) {
+      col = 0;
+      row += 1;
+    } else if (wrap && col < 0) {
+      col = columns.length - 1;
+      row -= 1;
+    }
+    row += dRow;
+    if (row < 0 || row >= states.length || col < 0 || col >= columns.length) return null;
+    return { state: states[row], symbol: columns[col] };
+  }
+
+  /* ------------------------------ editing --------------------------- */
+
+  function startEdit(cell, initialText) {
+    if (tableUi.editing) {
+      if (sameCell(tableUi.editing, cell)) return;
+      if (!commitEdit()) return; // the other cell is invalid: stay there
+    }
+    const td = cellTd(cell);
+    if (!td) return;
+    const error = sameCell(tableUi.error, cell) ? tableUi.error : null;
+    const value = initialText !== undefined ? initialText
+      : error ? error.text : formatCell(doc().automaton, cell.state, cell.symbol);
+
+    const width = td.offsetWidth; // keep the column from jumping while editing
+    td.textContent = "";
+    td.classList.add("editing");
+    td.classList.remove("missing");
+    td.removeAttribute("title");
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "cell-input" + (error ? " invalid" : "");
+    input.value = value;
+    input.style.width = Math.max(width, 96) + "px";
+    input.autocomplete = "off";
+    input.spellcheck = false;
+    input.setAttribute("aria-label", cellLabel(cell.state, cell.symbol) + " targets");
+    if (error) input.title = error.message;
+    input.addEventListener("keydown", onEditorKeydown);
+    input.addEventListener("blur", onEditorBlur);
+    input.addEventListener("input", () => input.classList.remove("invalid"));
+    td.appendChild(input);
+
+    tableUi.editing = { state: cell.state, symbol: cell.symbol, input: input };
+    for (const other of tableUi.cells.values()) other.tabIndex = -1;
+    td.tabIndex = 0;
+    tableUi.focus = { state: cell.state, symbol: cell.symbol };
+    input.focus();
+    input.setSelectionRange(value.length, value.length);
+  }
+
+  /**
+   * Close the open editor, committing its text. Returns false (and keeps the
+   * editor open, marked invalid) when the text names unknown states.
+   * A changed cell is exactly one undo step; an unchanged one is a no-op.
+   */
+  function commitEdit() {
+    const editing = tableUi.editing;
+    if (!editing) return true;
+    const cell = { state: editing.state, symbol: editing.symbol };
+    const text = editing.input.value;
+    const automaton = doc().automaton;
+    const change = previewCell(automaton, cell.state, cell.symbol, text);
+
+    if (change.errors.length) {
+      tableUi.error = {
+        state: cell.state,
+        symbol: cell.symbol,
+        text: text,
+        message: change.errors.join(" ") +
+          " The table never creates states: add it with + state first.",
+      };
+      editing.input.classList.add("invalid");
+      editing.input.title = tableUi.error.message;
+      renderTableMessage();
+      return false;
+    }
+
+    tableUi.editing = null;
+    if (sameCell(tableUi.error, cell)) tableUi.error = null;
+    if (!change.changed) {
+      const td = cellTd(cell);
+      if (td) renderCellContent(td);
+      renderTableMessage();
+      return true;
+    }
     pushHistory();
-    doc().automaton.removeTransition(parts[0], parts[1], parts[2]);
-    selection.transition = null;
+    applyCellChange(automaton, cell.state, cell.symbol, change);
     resetSimulation();
     refresh();
+    return true;
+  }
+
+  /** Esc: drop the typed text (and any parked error) and show the model again. */
+  function cancelEdit() {
+    const editing = tableUi.editing;
+    if (!editing) return;
+    const cell = { state: editing.state, symbol: editing.symbol };
+    tableUi.editing = null;
+    if (sameCell(tableUi.error, cell)) tableUi.error = null;
+    const td = cellTd(cell);
+    if (td) renderCellContent(td);
+    renderTableMessage();
+    focusCell(cell);
+  }
+
+  function onEditorBlur(e) {
+    const editing = tableUi.editing;
+    if (!editing || editing.input !== e.target) return; // already closed
+    if (commitEdit()) return;
+    // Refused: park the text as a red cell (with its message) instead of losing it.
+    tableUi.editing = null;
+    const td = cellTd(editing);
+    if (td) renderCellContent(td);
+  }
+
+  function onEditorKeydown(e) {
+    const editing = tableUi.editing;
+    if (!editing) return;
+    const input = editing.input;
+    const cell = { state: editing.state, symbol: editing.symbol };
+    const atStart = input.selectionStart === 0 && input.selectionEnd === 0;
+    const atEnd = input.selectionStart === input.value.length &&
+      input.selectionEnd === input.value.length;
+    let next;
+    switch (e.key) {
+      case "Enter":
+        e.preventDefault();
+        if (commitEdit()) focusCell(cell);
+        return;
+      case "Escape":
+        e.preventDefault();
+        e.stopPropagation();
+        cancelEdit();
+        return;
+      case "Tab":
+        next = neighbourCell(cell, 0, e.shiftKey ? -1 : 1, true);
+        break;
+      case "ArrowUp":
+        next = neighbourCell(cell, -1, 0, false);
+        break;
+      case "ArrowDown":
+        next = neighbourCell(cell, 1, 0, false);
+        break;
+      case "ArrowLeft":
+        if (!atStart) return; // move the caret inside the text
+        next = neighbourCell(cell, 0, -1, false);
+        break;
+      case "ArrowRight":
+        if (!atEnd) return;
+        next = neighbourCell(cell, 0, 1, false);
+        break;
+      default:
+        return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    if (!commitEdit()) return;
+    if (next) focusCell(next);
+    else if (e.key === "Tab" && !e.shiftKey) $("ttable-add-state").focus();
+    else focusCell(cell);
+  }
+
+  /** Keys on a focused (not editing) cell: spreadsheet-style navigation. */
+  function onCellKeydown(e) {
+    const td = e.target;
+    if (!td._cell || tableUi.editing) return;
+    const cell = td._cell;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    let next;
+    switch (e.key) {
+      case "Enter":
+      case "F2":
+        e.preventDefault();
+        startEdit(cell);
+        return;
+      case "Tab":
+        next = neighbourCell(cell, 0, e.shiftKey ? -1 : 1, true);
+        if (!next) return; // let Tab leave the table
+        break;
+      case "ArrowUp": next = neighbourCell(cell, -1, 0, false); break;
+      case "ArrowDown": next = neighbourCell(cell, 1, 0, false); break;
+      case "ArrowLeft": next = neighbourCell(cell, 0, -1, false); break;
+      case "ArrowRight": next = neighbourCell(cell, 0, 1, false); break;
+      case "Escape":
+        if (sameCell(tableUi.error, cell)) {
+          tableUi.error = null;
+          renderCellContent(td);
+          renderTableMessage();
+        }
+        return;
+      default:
+        // Typing a character replaces the cell's text, as in a spreadsheet.
+        if (e.key.length === 1 && e.key !== " ") {
+          e.preventDefault();
+          startEdit(cell, e.key);
+        }
+        return;
+    }
+    // Arrows never fall through to the simulation's ← → stepping here.
+    e.preventDefault();
+    e.stopPropagation();
+    if (next) focusCell(next);
+  }
+
+  /* ------------------------------ linking --------------------------- */
+
+  /** Point at the hovered (else focused) cell's edges on the diagram. */
+  function updateHoverEdges() {
+    let cell = tableUi.hover;
+    if (!cell && tableUi.focus && $("ttable").contains(document.activeElement)) {
+      cell = tableUi.focus;
+    }
+    if (!cell) {
+      if (graph.hoverEdges.size) graph.setHoverEdges(null, []);
+      return;
+    }
+    graph.setHoverEdges(cell.state, cellTargets(doc().automaton, cell.state, cell.symbol));
+  }
+
+  /**
+   * Mirror the simulation: rows of the active states, the column of the next
+   * symbol to read (the tape's current cell) and, strongest, where they meet.
+   */
+  function applyTableSimHighlight() {
+    const sim = doc().sim;
+    let rows = new Set();
+    let column = null;
+    if (sim.result && sim.result.steps.length) {
+      const step = sim.result.steps[sim.index];
+      rows = step.toStates;
+      const symbols = Array.from(sim.result.inputString);
+      if (sim.index < symbols.length && rows.size) column = symbols[sim.index];
+    }
+    for (const [state, tr] of tableUi.rows) tr.classList.toggle("sim-row", rows.has(state));
+    for (const th of $("ttable").querySelectorAll("th.col-head")) {
+      th.classList.toggle("sim-col", th.dataset.symbol === column);
+    }
+    for (const td of tableUi.cells.values()) {
+      const inColumn = td._cell.symbol === column;
+      td.classList.toggle("sim-col", inColumn);
+      td.classList.toggle("sim-cell", inColumn && rows.has(td._cell.state));
+    }
+  }
+
+  function scrollRowIntoView(tr) {
+    const box = $("ttable-scroll");
+    if (!tr || !box.offsetParent) return; // tab hidden
+    const head = $("ttable").tHead;
+    const top = box.getBoundingClientRect().top + (head ? head.offsetHeight : 0);
+    const rect = tr.getBoundingClientRect();
+    const bottom = box.getBoundingClientRect().bottom;
+    if (rect.top < top) box.scrollTop -= top - rect.top;
+    else if (rect.bottom > bottom) box.scrollTop += rect.bottom - bottom;
+  }
+
+  /** Tell the layout how wide the table would like the editor panel to be. */
+  function updateTableWidth() {
+    // Measure the table's natural width, not the panel-filling min-width:
+    // otherwise a panel widened once could never shrink back.
+    const table = $("ttable");
+    table.style.minWidth = "0";
+    const width = table.offsetWidth;
+    table.style.minWidth = "";
+    if (!width) return; // the Transitions tab is not showing
+    $("layout").style.setProperty("--table-w", Math.ceil(width + 28) + "px");
+  }
+
+  function selectState(state) {
+    sel().state = state;
+    refresh();
+  }
+
+  function initTable() {
+    const table = $("ttable");
+
+    table.addEventListener("mousedown", (e) => {
+      if (e.button !== 0) return;
+      const editing = tableUi.editing;
+      if (editing && editing.input.contains(e.target)) return; // caret placement
+      const td = e.target.closest("td");
+      if (td && td._cell) {
+        e.preventDefault();
+        startEdit(td._cell);
+        return;
+      }
+      if (!editing) return;
+      if (e.target.closest("button")) {
+        e.preventDefault(); // keep the editor until the click commits it
+      } else if (e.target.classList.contains("ttable-add")) {
+        e.preventDefault();
+        const id = e.target.id;
+        if (commitEdit()) $(id).focus();
+      }
+    });
+
+    table.addEventListener("click", (e) => {
+      const button = e.target.closest("button[data-action]");
+      if (!button) return;
+      const state = button.closest("tr").dataset.state;
+      if (!commitEdit()) return;
+      if (button.dataset.action === "start") setStartState(state);
+      else if (button.dataset.action === "accept") toggleAccept(state);
+      else selectState(state);
+    });
+
+    table.addEventListener("keydown", (e) => {
+      if (e.target.tagName === "TD") onCellKeydown(e);
+      else if (e.target.id === "ttable-add-state" && e.key === "Enter") {
+        if (createState(e.target.value.trim())) $("ttable-add-state").value = "";
+      } else if (e.target.id === "ttable-add-symbol" && e.key === "Enter") {
+        if (createSymbol(e.target.value.trim())) $("ttable-add-symbol").value = "";
+      }
+    });
+
+    table.addEventListener("focusin", (e) => {
+      const td = e.target.closest("td");
+      if (td && td._cell) tableUi.focus = td._cell;
+      updateHoverEdges();
+    });
+    table.addEventListener("focusout", (e) => {
+      // Focus left the table: only a mouse hover may still point at edges.
+      if (!table.contains(e.relatedTarget)) setTimeout(updateHoverEdges, 0);
+    });
+
+    table.addEventListener("mouseover", (e) => {
+      const td = e.target.closest("td");
+      const cell = td && td._cell ? td._cell : null;
+      if (sameCell(cell, tableUi.hover) || (!cell && !tableUi.hover)) return;
+      tableUi.hover = cell;
+      updateHoverEdges();
+    });
+    table.addEventListener("mouseleave", () => {
+      tableUi.hover = null;
+      updateHoverEdges();
+    });
+
+    $("toggle-epsilon").addEventListener("change", (e) => {
+      tableUi.showEpsilon = e.target.checked;
+      renderTable();
+    });
+
+    // Keep the diagram centred while the canvas narrows or widens (e.g. the
+    // editor panel growing for the table) instead of cropping one side.
+    if (window.ResizeObserver) {
+      const svg = $("canvas");
+      let lastWidth = 0;
+      new ResizeObserver(() => {
+        const width = svg.getBoundingClientRect().width;
+        if (lastWidth && width && graph && width !== lastWidth) {
+          graph.offsetX += (width - lastWidth) / 2;
+          graph.applyTransform();
+        }
+        lastWidth = width;
+      }).observe(svg);
+    }
   }
 
   /* ---------------------------------------------------------------- */
@@ -480,6 +988,7 @@
       graph.highlightedStates = new Set();
       graph.highlightedEdges = new Set();
     }
+    applyTableSimHighlight();
     clearSimulationBar();
   }
 
@@ -540,6 +1049,7 @@
     const step = simResult.steps[simIndex];
 
     graph.setHighlight(step.toStates, step.symbol, step.fromStates);
+    applyTableSimHighlight();
 
     const consumed = simIndex;
     const symbols = Array.from(simResult.inputString);
@@ -1027,6 +1537,9 @@
   function showDocument() {
     stopAuto();
     const current = doc();
+    tableUi.focus = null;
+    tableUi.error = null;
+    tableUi.hover = null;
     graph.automaton = current.automaton;
     graph.selectedState = current.selection.state;
     graph.highlightedStates = new Set();
@@ -1237,6 +1750,11 @@
           tab.classList.add("active");
           const target = panel.querySelector('[data-panel="' + tab.dataset.tab + '"]');
           if (target) target.classList.add("active");
+          if (panel.classList.contains("panel-left")) {
+            // The transition table gets a wider editor panel (see styles.css).
+            $("layout").classList.toggle("table-mode", tab.dataset.tab === "transitions");
+            updateTableWidth();
+          }
         });
       }
     }
@@ -1270,7 +1788,7 @@
     });
     $("btn-remove-state").addEventListener("click", removeState);
     $("btn-rename-state").addEventListener("click", renameState);
-    $("btn-set-start").addEventListener("click", setStartState);
+    $("btn-set-start").addEventListener("click", () => setStartState(null));
     $("btn-toggle-accept").addEventListener("click", () => toggleAccept(null));
 
     $("btn-add-symbol").addEventListener("click", addSymbol);
@@ -1279,8 +1797,7 @@
     });
     $("btn-remove-symbol").addEventListener("click", removeSymbol);
 
-    $("btn-add-transition").addEventListener("click", addTransition);
-    $("btn-remove-transition").addEventListener("click", removeTransition);
+    initTable();
 
     $("btn-simulate").addEventListener("click", runSimulation);
     $("input-string").addEventListener("keydown", (e) => {
