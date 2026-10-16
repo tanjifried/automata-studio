@@ -80,6 +80,12 @@ Forked from [ReyEscarlata0/automata-studio](https://github.com/ReyEscarlata0/aut
   q1 eps q2      # eps or ε = epsilon
   ```
 - Export the diagram to PNG
+- **Copy image** copies the full active diagram to the clipboard at 2× resolution
+  using the current theme. Simulation highlights and state diagnostics are kept;
+  selection and hover outlines are omitted. Empty diagrams cannot be copied.
+  Clipboard access needs a supported browser and a secure page (HTTPS or localhost).
+  If copying is unavailable or denied, the message offers **Download PNG** for
+  the same image
 - Printable report (diagram, properties and transition table) that the browser
   can save as PDF
 
@@ -161,6 +167,23 @@ node web/tests/run-tests.js      # 308 checks in 5 suites
 | `documents.test.js` | 70 |
 | `table.test.js` | 59 |
 
+### Optional clipboard browser checks
+
+With Chrome and `playwright-core` available, start the web app locally and run:
+
+```bash
+python3 -m http.server 8767 --directory web
+# In another terminal (NODE_PATH is only needed for an external install):
+NODE_PATH=/path/to/node_modules node web/tests/clipboard.browser.test.js http://127.0.0.1:8767
+```
+
+Set `CHROME_BIN` if Chrome is not at `/usr/bin/google-chrome`. These checks
+write a PNG to the browser test context's clipboard and read it back, then cover
+clean highlights, themes, busy/empty states, failures, fallback downloads, and
+narrow screens. Screenshots go to `/tmp/automata-copy-image-checks` by default;
+pass a second argument to choose another output directory.
+
+
 ---
 
 ## The `.afjson` format
@@ -202,7 +225,6 @@ contains dead and unreachable states.
 | DFA minimization | Moore partition refinement | Drops unreachable states first |
 | Reachable states | Depth-first search from the start state | |
 | Dead states | Backward search from the accepting states | States that can never accept |
-
 ---
 
 ## License
