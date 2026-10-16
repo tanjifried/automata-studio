@@ -204,12 +204,33 @@ class GraphView {
       maxY = Math.max(maxY, p.y);
     }
     const pad = STATE_RADIUS + 70;
-    return {
-      x: minX - pad,
-      y: minY - pad,
-      width: maxX - minX + pad * 2,
-      height: maxY - minY + pad * 2,
-    };
+    minX -= pad;
+    minY -= pad;
+    maxX += pad;
+    maxY += pad;
+
+    // Curved edges, their labels and self-loops can reach well past the
+    // states, so also include everything actually drawn (plus a margin).
+    // getBBox() is in the viewport group's own coordinates, i.e. scene space.
+    const drawn = this.drawnBounds();
+    if (drawn) {
+      const margin = 24;
+      minX = Math.min(minX, drawn.x - margin);
+      minY = Math.min(minY, drawn.y - margin);
+      maxX = Math.max(maxX, drawn.x + drawn.width + margin);
+      maxY = Math.max(maxY, drawn.y + drawn.height + margin);
+    }
+    return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+  }
+
+  /** Bounding box of the rendered scene, or null when it cannot be measured. */
+  drawnBounds() {
+    try {
+      const box = this.viewport.getBBox();
+      return box.width || box.height ? box : null;
+    } catch (err) {
+      return null; // not rendered (e.g. display: none)
+    }
   }
 
   fitView() {
