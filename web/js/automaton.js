@@ -9,6 +9,20 @@
 
 const EPSILON = "ε";
 
+/** Names a user may type for a state: letters, digits, "_" and "-". */
+const STATE_NAME_RE = /^[A-Za-z0-9_-]+$/;
+
+/**
+ * Why a string cannot be an alphabet symbol, or null when it can.
+ * Symbols are exactly one character and ε is reserved for epsilon moves.
+ */
+function symbolProblem(symbol) {
+  if (!symbol) return "The symbol cannot be empty.";
+  if (symbol === EPSILON) return "That symbol is reserved for epsilon transitions.";
+  if (Array.from(symbol).length !== 1) return "Use single-character symbols.";
+  return null;
+}
+
 /* ------------------------------------------------------------------ */
 /* Small set helpers (JS Set has no union/intersection operators)     */
 /* ------------------------------------------------------------------ */

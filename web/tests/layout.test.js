@@ -1,8 +1,8 @@
 /**
  * Tests for the layered Auto-sort layout (js/layout.js).
  *
- * Executed by run-tests.js after algorithms.test.js, in the same context, so
- * everything is wrapped in a function to keep its helpers private.
+ * Executed by run-tests.js in its own context; the wrapper function keeps
+ * its helpers private all the same.
  */
 
 (function () {
