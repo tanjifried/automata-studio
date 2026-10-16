@@ -1,7 +1,7 @@
 /**
  * Core data model for a finite automaton (DFA or NFA).
  *
- * Faithful JavaScript port of models/automaton.py from the desktop app.
+ * Automaton data model (DFA and NFA in one class).
  * A single class represents both DFA and NFA: an NFA is simply an
  * Automaton whose transition function maps to more than one target state
  * for some (state, symbol) pair, and/or uses epsilon transitions.
@@ -10,7 +10,7 @@
 const EPSILON = "ε";
 
 /* ------------------------------------------------------------------ */
-/* Small set helpers (Python set operators have no JS equivalent)      */
+/* Small set helpers (JS Set has no union/intersection operators)     */
 /* ------------------------------------------------------------------ */
 
 function setUnion(a, b) {
@@ -45,7 +45,7 @@ function sortedArray(iterable) {
  */
 const KEY_SEP = String.fromCharCode(1);
 
-/** Canonical key for a set of states, standing in for Python frozenset. */
+/** Canonical key for a set of states, usable as a Map/Set key. */
 function setKey(iterable) {
   return sortedArray(iterable).join(KEY_SEP);
 }
@@ -318,7 +318,7 @@ class Automaton {
   }
 
   /* ---------------------------------------------------------------- */
-  /* Serialization - the .afjson format shared with the desktop app    */
+  /* Serialization - the .afjson project format                        */
   /* ---------------------------------------------------------------- */
 
   toJSON() {

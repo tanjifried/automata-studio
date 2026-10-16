@@ -1,23 +1,19 @@
 # AutomataStudio
 
-**Build, simulate and analyse finite automata — in your browser or on your desktop.**
+**Build, simulate and analyse finite automata in your browser.**
 
 An educational tool for creating, editing, converting, simulating and analysing
 Deterministic (DFA) and Non-deterministic (NFA) Finite Automata, including
-ε-transitions. It exists in two forms that share the same file format and the
-same algorithms: a **web app** that runs entirely in the browser, and a
-**Python desktop app** built with PyQt6.
+ε-transitions. It runs entirely in the browser: no install, no account, no
+server.
 
-[![Live demo](https://img.shields.io/badge/live%20demo-open-2d6fd6)](https://reyescarlata0.github.io/automata-studio/)
-[![Deploy](https://github.com/ReyEscarlata0/automata-studio/actions/workflows/deploy-pages.yml/badge.svg)](https://github.com/ReyEscarlata0/automata-studio/actions/workflows/deploy-pages.yml)
-[![Release](https://img.shields.io/github/v/release/ReyEscarlata0/automata-studio)](https://github.com/ReyEscarlata0/automata-studio/releases/latest)
+[![Live demo](https://img.shields.io/badge/live%20demo-open-2d6fd6)](https://tanjifried.github.io/automata-studio/)
+[![Deploy](https://github.com/tanjifried/automata-studio/actions/workflows/deploy-pages.yml/badge.svg)](https://github.com/tanjifried/automata-studio/actions/workflows/deploy-pages.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-> 🌐 **Try it now — no installation:** **[reyescarlata0.github.io/automata-studio](https://reyescarlata0.github.io/automata-studio/)**
->
-> 💻 **Prefer a desktop app?** [Download AutomataStudio.exe](https://github.com/ReyEscarlata0/automata-studio/releases/latest) (Windows, no Python needed)
+> **Try it now:** **[tanjifried.github.io/automata-studio](https://tanjifried.github.io/automata-studio/)**
 
-*[Versión en español del README](README.es.md)*
+Forked from [ReyEscarlata0/automata-studio](https://github.com/ReyEscarlata0/automata-studio).
 
 ---
 
@@ -44,47 +40,28 @@ same algorithms: a **web app** that runs entirely in the browser, and a
   unreachable states, dead states and missing transitions
 
 **Files**
-- Save and open `.afjson` projects — **the same file works in both apps**
+- Save and open `.afjson` projects
 - Export the diagram to PNG
 - Printable report (diagram, properties and transition table) that the browser
-  can save as PDF; the desktop app writes the PDF directly
+  can save as PDF
 
 **Interface**
 - Light and dark themes, following the system preference by default
 - Responsive layout that works on tablets and phones
-- The web app is fully static: no server, no account, nothing leaves your machine
+- Fully static: nothing leaves your machine
+
 <img width="1917" height="907" alt="image" src="https://github.com/user-attachments/assets/64022852-3a07-4737-865f-ce5dac999c65" />
-
----
-
-## The two versions
-
-|  | Web app | Desktop app |
-|---|---|---|
-| Run it | [In the browser](https://reyescarlata0.github.io/automata-studio/) | [Download the `.exe`](https://github.com/ReyEscarlata0/automata-studio/releases/latest) |
-| Requirements | Any modern browser | Windows (or Python 3.10+ from source) |
-| Language | JavaScript (no framework, no build step) | Python 3.10+ / PyQt6 |
-| Diagram | Inline SVG | `QGraphicsView` |
-| PDF report | Browser print dialog | Generated with `reportlab` |
-| Source | [`web/`](web/) | repository root |
-
-Both implement the same algorithms and read and write the same `.afjson`
-format, so you can start an automaton in one and finish it in the other.
 
 ---
 
 ## Tech stack
 
-**Web app** — vanilla JavaScript (ES2020), inline SVG, CSS custom properties.
-No framework, no bundler, no dependencies: the browser loads five plain scripts
-and runs them.
+Vanilla JavaScript (ES2020), inline SVG, CSS custom properties. No framework,
+no bundler, no dependencies: the browser loads five plain scripts and runs
+them.
 
-**Desktop app** — Python 3.10+, [PyQt6](https://pypi.org/project/PyQt6/) for
-the interface, [reportlab](https://pypi.org/project/reportlab/) for PDF export,
-and [PyInstaller](https://pyinstaller.org/) to produce the standalone `.exe`.
-
-**CI/CD** — GitHub Actions runs the algorithm test suite on every push and
-deploys `web/` to GitHub Pages only if the tests pass.
+**CI/CD** — GitHub Actions runs the algorithm test suite on every push to
+`main` and deploys `web/` to GitHub Pages only if the tests pass.
 
 ---
 
@@ -92,84 +69,47 @@ deploys `web/` to GitHub Pages only if the tests pass.
 
 ```
 automata-studio/
-├── main.py                  # Desktop entry point
-├── requirements.txt
-├── models/automaton.py      # Automaton data model (DFA and NFA in one class)
-├── algorithms/              # Simulation, subset construction, minimization, properties
-├── controllers/             # Mediator between model, algorithms and views (undo/redo)
-├── views/                   # Main window, editor panels, graphics canvas
-├── utils/                   # Validators, history, import/export, themes
-├── resources/               # Preloaded examples and the app icon
-├── tests/                   # Python smoke tests (algorithms and GUI)
-├── examples/                # Sample .afjson automata, readable by both apps
-└── web/                     # The browser version
+├── examples/                # Sample .afjson automata
+└── web/                     # The app (deployed as-is to GitHub Pages)
     ├── index.html
     ├── css/styles.css
     ├── js/
-    │   ├── automaton.js     # Port of models/automaton.py
-    │   ├── algorithms.js    # Port of the algorithms/ package
-    │   ├── examples.js      # Port of resources/examples.py
+    │   ├── automaton.js     # Automaton data model (DFA and NFA in one class)
+    │   ├── algorithms.js    # Simulation, subset construction, minimization, properties
+    │   ├── examples.js      # Preloaded example automata
     │   ├── graph.js         # SVG renderer: drag, zoom, pan, edge routing
     │   └── app.js           # UI wiring, history, file I/O, export
-    └── tests/               # Node test suite mirroring the Python one
+    └── tests/               # Node test suite for the algorithms
 ```
 
-The algorithm layer is deliberately pure in both languages: it takes an
-automaton and returns a result carrying the intermediate steps, with no
-dependency on Qt or on the DOM. That is what made porting the logic to
-JavaScript straightforward, and it is why the two suites can be compared
-case for case.
+The algorithm layer is deliberately pure: it takes an automaton and returns a
+result carrying the intermediate steps, with no dependency on the DOM. That is
+what lets the UI show the process and not only the outcome, and what lets the
+tests run under plain Node.
 
 ---
 
 ## Running locally
 
-### Web app
-
 It is a static site, so any HTTP server works:
 
 ```bash
-git clone https://github.com/ReyEscarlata0/automata-studio.git
+git clone https://github.com/tanjifried/automata-studio.git
 cd automata-studio/web
-python -m http.server 8000
+python3 -m http.server 8000
 # open http://localhost:8000
 ```
 
 Opening `web/index.html` directly from the file system also works — there are
 no modules or fetch calls that would trip over the `file://` origin.
 
-### Desktop app
-
-Requires Python 3.10 or newer.
-
-```bash
-git clone https://github.com/ReyEscarlata0/automata-studio.git
-cd automata-studio
-pip install -r requirements.txt
-python main.py
-```
-
-### Building the Windows executable
-
-```bash
-pip install pyinstaller
-pyinstaller AutomataStudio.spec
-# result: dist/AutomataStudio.exe
-```
-
 ---
 
 ## Tests
 
 ```bash
-node web/tests/run-tests.js      # JavaScript port  (45 checks)
-python tests/test_algorithms.py  # Python original
-python tests/smoke_gui.py        # End-to-end GUI test (needs PyQt6)
+node web/tests/run-tests.js      # 45 checks
 ```
-
-The two algorithm suites are deliberate mirrors of each other: same automata,
-same input strings, same expected answers. Passing both is the evidence that
-the port preserves the original behaviour.
 
 ---
 

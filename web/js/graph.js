@@ -1,7 +1,7 @@
 /**
  * SVG renderer for the automaton diagram.
  *
- * Replaces the QGraphicsView canvas of the desktop app: states are draggable
+ * States are draggable
  * circles, transitions are straight lines, quadratic curves (when a pair of
  * states is connected both ways) or self-loops, and the whole scene pans and
  * zooms. Every visual attribute is written directly on the element rather
@@ -151,7 +151,7 @@ class GraphView {
   /* Layout                                                            */
   /* ---------------------------------------------------------------- */
 
-  /** Circular auto-layout, same formula as the desktop app. */
+  /** Circular auto-layout. */
   autoLayout() {
     const automaton = this.automaton;
     const n = automaton.states.length;
