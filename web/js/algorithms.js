@@ -2,14 +2,13 @@
  * Automaton algorithms: simulation, subset construction, minimization,
  * property analysis and trivial conversions.
  *
- * Faithful JavaScript port of the algorithms/ package of the desktop app.
  * Every function here is pure: it takes an Automaton and returns a result
  * object that also carries the intermediate steps, so the UI can show the
  * process and not only the outcome.
  */
 
 /* ------------------------------------------------------------------ */
-/* Simulation (algorithms/simulation.py)                               */
+/* Simulation                                                         */
 /* ------------------------------------------------------------------ */
 
 function epsilonClosure(automaton, states) {
@@ -93,7 +92,7 @@ function simulate(automaton, inputString) {
 }
 
 /* ------------------------------------------------------------------ */
-/* NFA -> DFA, subset construction (algorithms/subset_construction.py)  */
+/* NFA -> DFA, subset construction                                    */
 /* ------------------------------------------------------------------ */
 
 function subsetLabel(states) {
@@ -184,7 +183,7 @@ function nfaToDfa(nfa) {
 }
 
 /* ------------------------------------------------------------------ */
-/* DFA minimization, partition refinement (algorithms/minimization.py)  */
+/* DFA minimization, partition refinement                             */
 /* ------------------------------------------------------------------ */
 
 /**
@@ -295,7 +294,7 @@ function minimizeDfa(dfa) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Property analysis (algorithms/properties.py)                        */
+/* Property analysis                                                  */
 /* ------------------------------------------------------------------ */
 
 function analyzeProperties(automaton) {
@@ -324,7 +323,7 @@ function analyzeProperties(automaton) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Trivial conversions (algorithms/conversions.py)                     */
+/* Trivial conversions                                                */
 /* ------------------------------------------------------------------ */
 
 /** Every DFA is already a valid NFA; return an equivalent copy. */

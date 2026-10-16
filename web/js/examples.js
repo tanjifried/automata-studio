@@ -1,7 +1,6 @@
 /**
  * Preloaded example automata for learning and quick testing.
- * Port of resources/examples.py. The data is identical to the .afjson
- * files shipped in examples/, so both apps open the same automata.
+ * The data is identical to the .afjson files shipped in examples/.
  */
 
 const EXAMPLES = {

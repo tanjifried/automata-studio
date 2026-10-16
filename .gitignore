@@ -1,30 +1,5 @@
-# ---- Python ----
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-env/
-venv/
-.venv/
-ENV/
-pip-wheel-metadata/
-*.egg-info/
-.eggs/
-
-# ---- PyInstaller build artifacts ----
-build/
-dist/
-*.manifest
-*.spec.bak
-
-# ---- Testing / coverage ----
-.pytest_cache/
-.coverage
-htmlcov/
-.tox/
-.mypy_cache/
-.ruff_cache/
+# ---- Node ----
+node_modules/
 
 # ---- Environment / secrets ----
 .env
@@ -35,6 +10,7 @@ htmlcov/
 .vscode/
 .idea/
 *.swp
+.DS_Store
 Thumbs.db
 desktop.ini
 Desktop.ini

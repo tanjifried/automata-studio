@@ -1,9 +1,5 @@
 /**
- * Smoke tests for the ported algorithms.
- *
- * This mirrors tests/test_algorithms.py case for case: the same automata,
- * the same strings, the same expected answers. If both suites pass, the
- * JavaScript port and the Python original agree.
+ * Smoke tests for the automaton algorithms.
  *
  * Run with:  node web/tests/run-tests.js
  *
@@ -135,7 +131,7 @@ function testProperties() {
 }
 
 function testSerializationRoundTrip() {
-  // The .afjson format is shared with the desktop app, so it must survive
+  // The .afjson format is the project file format, so it must survive
   // a full save/load cycle unchanged.
   const original = buildNfaEndsWithAb();
   const restored = Automaton.fromJSON(JSON.parse(JSON.stringify(original.toJSON())));
@@ -178,7 +174,7 @@ function testBundledExamples() {
 
 /* ------------------------------------------------------------------ */
 
-console.log("Running AutomataStudio algorithm tests (JavaScript port)\n");
+console.log("Running AutomataStudio algorithm tests\n");
 
 testSimulation();
 testSubsetConstruction();

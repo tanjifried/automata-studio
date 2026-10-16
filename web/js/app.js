@@ -2,8 +2,7 @@
  * Application shell: wires the editor panels, the diagram, the simulation
  * bar and the conversion tools together.
  *
- * Plays the role of views/main_window.py plus controllers/automaton_controller.py
- * in the desktop app: it is the only place that mutates the model, and every
+ * It is the only place that mutates the model, and every
  * mutation goes through pushHistory() so undo/redo stays consistent.
  */
 
@@ -730,7 +729,7 @@
     const data = JSON.stringify(automaton.toJSON(), null, 2);
     downloadBlob(new Blob([data], { type: "application/json" }),
       safeFilename(automaton.name) + ".afjson");
-    toast("Downloaded as .afjson — the desktop app opens this file.", "ok");
+    toast("Downloaded as .afjson.", "ok");
   }
 
   function openFile(file) {

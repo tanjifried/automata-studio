@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Test runner for the web port.
+ * Test runner for the web app.
  *
  * The browser sources are plain classic scripts that share one global scope
  * and deliberately have no module system, so the runner rebuilds that same
