@@ -338,8 +338,6 @@
   /* Editor actions                                                    */
   /* ---------------------------------------------------------------- */
 
-  const STATE_NAME_RE = /^[A-Za-z0-9_-]+$/;
-
   function addState() {
     const input = $("input-state");
     const name = input.value.trim();
@@ -411,13 +409,8 @@
   function addSymbol() {
     const input = $("input-symbol");
     const symbol = input.value.trim();
-    if (!symbol) return toast("The symbol cannot be empty.", "error");
-    if (symbol === EPSILON) {
-      return toast("That symbol is reserved for epsilon transitions.", "error");
-    }
-    if (Array.from(symbol).length !== 1) {
-      return toast("Use single-character symbols.", "error");
-    }
+    const problem = symbolProblem(symbol);
+    if (problem) return toast(problem, "error");
     if (automaton.alphabet.indexOf(symbol) !== -1) {
       return toast('Symbol "' + symbol + '" is already in the alphabet.', "error");
     }
@@ -760,6 +753,147 @@
     reader.readAsText(file);
   }
 
+  /* ---------------------------------------------------------------- */
+  /* Import dialog                                                     */
+  /* ---------------------------------------------------------------- */
+
+  function plural(count, word) {
+    return count + " " + word + (count === 1 ? "" : "s");
+  }
+
+  /** Parse the dialog text; returns { parsed, result } with result null if unusable. */
+  function currentImport() {
+    const parsed = parseImport($("import-text").value);
+    const usable = !parsed.empty && !parsed.errors.length;
+    return { parsed: parsed, result: usable ? applyImport(automaton, parsed) : null };
+  }
+
+  function renderImportPreview() {
+    const current = currentImport();
+    const parsed = current.parsed;
+    const result = current.result;
+    const preview = $("import-preview");
+    $("import-apply").disabled = !result;
+
+    if (parsed.empty) {
+      preview.innerHTML = '<p class="hint">Type or paste a definition, or drop a file, to see a preview here.</p>';
+      return;
+    }
+
+    const full = parsed.mode === "full";
+    let html = '<h4>Mode</h4><p class="import-mode ' + parsed.mode + '">' +
+      (full ? "Full import — replaces current automaton" : "Merge into current automaton") + "</p>";
+
+    html += "<h4>Contents</h4><p>" +
+      plural(parsed.states.length, "state") + " · " +
+      plural(parsed.alphabet.length, "symbol") + " · " +
+      plural(parsed.transitions.length, "transition") + "</p>";
+    if (parsed.startState) html += "<p>Start: <code>" + escapeHtml(parsed.startState) + "</code></p>";
+    if (parsed.acceptStates.length) {
+      html += "<p>Accepting: <code>" + escapeHtml(parsed.acceptStates.join(", ")) + "</code></p>";
+    }
+
+    if (result) {
+      if (!full) {
+        html += "<p>New: " + plural(result.added.states, "state") + ", " +
+          plural(result.added.symbols, "symbol") + ", " +
+          plural(result.added.transitions, "transition") + "</p>";
+      }
+      const created = [];
+      if (result.created.states.length) created.push(escapeHtml(result.created.states.join(", ")));
+      if (result.created.symbols.length) {
+        created.push("symbols: " + escapeHtml(result.created.symbols.join(", ")));
+      }
+      if (created.length) {
+        html += "<h4>Auto-created</h4><p>auto-created: " + created.join("; ") + "</p>";
+      }
+      if (parsed.format === "json") {
+        html += '<p class="hint">' + (result.needsLayout
+          ? "Some states have no position: the diagram will be auto-laid out."
+          : "Positions from the file are kept.") + "</p>";
+      }
+    }
+
+    if (parsed.errors.length) {
+      html += "<h4>Errors (" + parsed.errors.length + ')</h4><ul class="error-list">' +
+        parsed.errors.map((e) => "<li>" + escapeHtml(e) + "</li>").join("") + "</ul>";
+    }
+    preview.innerHTML = html;
+  }
+
+  function openImportDialog() {
+    renderImportPreview();
+    $("import-dialog").showModal();
+    $("import-text").focus();
+  }
+
+  function closeImportDialog() {
+    $("import-dialog").classList.remove("dragging");
+    $("import-dialog").close();
+  }
+
+  /** A picked or dropped file just fills the textarea; the one parser does the rest. */
+  function loadImportFile(file) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      $("import-text").value = String(reader.result);
+      renderImportPreview();
+    };
+    reader.onerror = () => toast("Could not read the file.", "error");
+    reader.readAsText(file);
+  }
+
+  function applyImportDialog() {
+    const result = currentImport().result;
+    if (!result) return;
+
+    // One history entry covers the import and the layout that follows it.
+    pushHistory();
+    automaton = result.automaton;
+    afterModelSwap();
+    if (result.needsLayout) graph.autoLayout();
+    else graph.fitView();
+    closeImportDialog();
+
+    const a = result.added;
+    toast(result.mode === "full"
+      ? "Imported " + plural(a.states, "state") + ", " + plural(a.symbols, "symbol") +
+        ", " + plural(a.transitions, "transition") + "."
+      : "Merged: +" + plural(a.states, "state") + ", +" + plural(a.symbols, "symbol") +
+        ", +" + plural(a.transitions, "transition") + ".", "ok");
+  }
+
+  function initImportDialog() {
+    const dialog = $("import-dialog");
+    $("btn-import").addEventListener("click", openImportDialog);
+    $("import-text").addEventListener("input", renderImportPreview);
+    $("import-cancel").addEventListener("click", closeImportDialog);
+    $("import-apply").addEventListener("click", applyImportDialog);
+    $("import-choose").addEventListener("click", () => $("import-file-input").click());
+    $("import-file-input").addEventListener("change", (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (file) loadImportFile(file);
+      e.target.value = "";
+    });
+
+    // The whole dialog is a drop target, textarea included.
+    dialog.addEventListener("dragover", (e) => {
+      if (!e.dataTransfer || Array.from(e.dataTransfer.types).indexOf("Files") === -1) return;
+      e.preventDefault();
+      dialog.classList.add("dragging");
+    });
+    dialog.addEventListener("dragleave", (e) => {
+      if (!dialog.contains(e.relatedTarget)) dialog.classList.remove("dragging");
+    });
+    dialog.addEventListener("drop", (e) => {
+      const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if (!file) return;
+      e.preventDefault();
+      dialog.classList.remove("dragging");
+      loadImportFile(file);
+    });
+  }
+
   function exportPng() {
     if (!automaton.states.length) return toast("Nothing to export yet.", "error");
     const background = isDark() ? "#14161a" : "#ffffff";
@@ -971,6 +1105,8 @@
     });
 
     document.addEventListener("keydown", (e) => {
+      // Shortcuts act on the canvas; leave them alone while a modal is open.
+      if (document.querySelector("dialog[open]")) return;
       const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
         e.preventDefault();
@@ -1010,6 +1146,7 @@
     initTabs();
     initExamples();
     initEvents();
+    initImportDialog();
     initTheme();
 
     // Open on a worked example rather than an empty canvas.
