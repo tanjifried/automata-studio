@@ -16,6 +16,7 @@ const GRAPH_COLORS = {
   accept: "#2e9e5b",
   startRing: "#e08a1e",
   highlight: "#e0483e",
+  hover: "#8e5ad8",
   dead: "#8a8f98",
   unreachableBorder: "#c94f4f",
   stateText: "#ffffff",
@@ -56,6 +57,9 @@ class GraphView {
     this.selectedState = null;
     this.highlightedStates = new Set();
     this.highlightedEdges = new Set();
+    // Edges pointed at from the transition table; drawn over the simulation
+    // highlight while set, which reappears untouched once cleared.
+    this.hoverEdges = new Set();
     this.deadStates = new Set();
     this.unreachableStates = new Set();
 
@@ -98,6 +102,7 @@ class GraphView {
     this.defs.appendChild(makeMarker("arrow-dark", GRAPH_COLORS.edgeDark));
     this.defs.appendChild(makeMarker("arrow-highlight", GRAPH_COLORS.highlight));
     this.defs.appendChild(makeMarker("arrow-start", GRAPH_COLORS.startRing));
+    this.defs.appendChild(makeMarker("arrow-hover", GRAPH_COLORS.hover));
   }
 
   get edgeColor() {
@@ -278,6 +283,7 @@ class GraphView {
 
     this.renderEdges();
     this.renderStates();
+    this.applyEdgeHighlight();
     this.applyTransform();
   }
 
@@ -669,7 +675,6 @@ class GraphView {
       }
     }
     this.render();
-    this.applyEdgeHighlight();
   }
 
   clearHighlight() {
@@ -678,17 +683,36 @@ class GraphView {
     this.render();
   }
 
+  /**
+   * Point at the edges source --symbol--> each target (transition table
+   * hover). Pass no targets to clear; the simulation highlight is kept apart
+   * and shows again as soon as the hover goes away.
+   */
+  setHoverEdges(source, targets) {
+    this.hoverEdges = new Set();
+    for (const target of targets || []) this.hoverEdges.add(source + KEY_SEP + target);
+    this.applyEdgeHighlight();
+  }
+
   applyEdgeHighlight() {
     for (const record of this.edgeRecords) {
       const key = record.source + KEY_SEP + record.target;
-      const on = this.highlightedEdges.has(key);
-      record.path.setAttribute("stroke", on ? GRAPH_COLORS.highlight : this.edgeColor);
-      record.path.setAttribute("stroke-width", on ? 3 : 2);
-      record.path.setAttribute(
-        "marker-end",
-        "url(#" + (on ? "arrow-highlight" : this.arrowMarker) + ")"
-      );
-      record.text.setAttribute("fill", on ? GRAPH_COLORS.highlight : this.edgeTextColor);
+      const hover = this.hoverEdges.has(key);
+      const sim = this.highlightedEdges.has(key);
+      let color = this.edgeColor;
+      let marker = this.arrowMarker;
+      if (hover) {
+        color = GRAPH_COLORS.hover;
+        marker = "arrow-hover";
+      } else if (sim) {
+        color = GRAPH_COLORS.highlight;
+        marker = "arrow-highlight";
+      }
+      record.path.setAttribute("stroke", color);
+      record.path.setAttribute("stroke-width", hover ? 3.5 : sim ? 3 : 2);
+      record.path.setAttribute("marker-end", "url(#" + marker + ")");
+      record.text.setAttribute("fill", hover || sim ? color : this.edgeTextColor);
+      record.text.setAttribute("font-weight", hover ? "700" : "400");
     }
   }
 
