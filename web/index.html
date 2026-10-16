@@ -24,7 +24,7 @@
   </div>
 
   <div class="toolbar-group">
-    <button id="btn-new" class="ghost" title="New automaton">New</button>
+    <button id="btn-new" class="ghost" title="New automaton in a new tab">New</button>
     <button id="btn-open" class="ghost" title="Open a .afjson file">Open</button>
     <button id="btn-save" class="ghost" title="Download as .afjson">Save</button>
     <button id="btn-import" class="ghost" title="Import from text or a file">Import</button>
@@ -107,6 +107,10 @@
 
   <!-- ---------------- Center: canvas ---------------- -->
   <section class="canvas-area" aria-label="Diagram">
+    <div class="doc-tabbar">
+      <div id="doc-tabs" class="doc-tabs" role="tablist" aria-label="Open automata"></div>
+      <button id="btn-new-tab" class="doc-tab-new" type="button" title="New tab">+</button>
+    </div>
     <div class="canvas-header">
       <input id="input-name" type="text" class="name-input" placeholder="Automaton name" maxlength="80">
       <span id="badge-type" class="badge">—</span>
@@ -146,9 +150,9 @@
         <button id="btn-to-nfa" class="secondary">DFA → NFA</button>
       </div>
       <div id="convert-body" class="result-box">
-        <p class="hint">Run a conversion to see the full process here before applying it.</p>
+        <p class="hint">Run a conversion to see the full process here, then open the result in a new tab.</p>
       </div>
-      <button id="btn-apply-conversion" class="apply" hidden>Use as current automaton</button>
+      <button id="btn-apply-conversion" class="apply" hidden>Open in new tab</button>
     </div>
   </section>
 </main>
@@ -187,16 +191,17 @@
     <li><strong>Transitions</strong> — pick a source, a symbol (ε included) and a target. Parallel symbols between the same two states share one arrow.</li>
     <li><strong>Canvas</strong> — drag states to rearrange, scroll to zoom, drag the background to pan. Double-click a state to toggle whether it accepts.</li>
     <li><strong>Simulate</strong> — type a string and step through it. Active states and the edges just taken are highlighted in red.</li>
-    <li><strong>Convert</strong> — subset construction, DFA minimization and the trivial DFA→NFA view. Each one shows its process before you apply it.</li>
-    <li><strong>Files</strong> — Save downloads a <code>.afjson</code> file, and Open reads the same format back in. Import takes a quick text definition (or pasted <code>.afjson</code>) and either replaces or extends the current automaton.</li>
+    <li><strong>Convert</strong> — subset construction, DFA minimization and the trivial DFA→NFA view. Each one shows its process; <em>Open in new tab</em> puts the result in its own tab and leaves the original untouched.</li>
+    <li><strong>Tabs</strong> — each tab above the canvas holds one automaton with its own undo history, simulation and zoom. <em>+</em> or New opens an empty tab, × closes one. Open, Examples and a full Import open in a new tab (or fill the current one if it is empty). All tabs are saved in this browser automatically and come back when you reload; undo history does not.</li>
+    <li><strong>Files</strong> — Save downloads the active tab as a <code>.afjson</code> file, and Open reads the same format back in. Import takes a quick text definition (or pasted <code>.afjson</code>): with a <code>start:</code> line it is a new automaton, without one it is merged into the current tab.</li>
   </ol>
-  <p class="hint">Keyboard: Ctrl+Z undo · Ctrl+Y redo · Enter simulates · ← → step through a simulation.</p>
+  <p class="hint">Keyboard: Ctrl+Z undo · Ctrl+Y redo (both act on the active tab) · Enter simulates · ← → step through a simulation · middle-click a tab to close it.</p>
   <form method="dialog"><button class="apply">Close</button></form>
 </dialog>
 
 <dialog id="import-dialog" class="dialog dialog-wide" aria-labelledby="import-title">
   <h2 id="import-title">Import automaton</h2>
-  <p class="hint">One item per line. A <code>start:</code> line replaces the current automaton; without one the lines are merged into it. Pasted <code>.afjson</code> also works.</p>
+  <p class="hint">One item per line. A <code>start:</code> line makes a new automaton (in a new tab unless this one is empty); without one the lines are merged into the current tab. Pasted <code>.afjson</code> also works.</p>
   <div class="import-grid">
     <div class="import-input">
       <textarea id="import-text" spellcheck="false" autocomplete="off" aria-label="Import text" placeholder="states: q0 q1 q2
@@ -227,6 +232,7 @@ q1 eps q2      # eps or ε = epsilon"></textarea>
 <script src="js/layout.js"></script>
 <script src="js/examples.js"></script>
 <script src="js/import.js"></script>
+<script src="js/documents.js"></script>
 <script src="js/graph.js"></script>
 <script src="js/app.js"></script>
 </body>

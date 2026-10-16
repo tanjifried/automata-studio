@@ -13,22 +13,17 @@
   /* Application state                                                 */
   /* ---------------------------------------------------------------- */
 
-  let automaton = new Automaton({ name: "Untitled automaton" });
+  // Everything that belongs to one automaton (history, selection, simulation,
+  // view) lives on its document; see documents.js. The active one is doc().
+  let documents = new DocumentList();
   let graph = null;
 
-  let undoStack = [];
-  let redoStack = [];
-  const HISTORY_LIMIT = 60;
-
-  let selectedState = null;
-  let selectedSymbol = null;
-  let selectedTransition = null;
-
-  let simResult = null;
-  let simIndex = 0;
+  // UI-only state that is not per document.
   let autoTimer = null;
-
   let pendingConversion = null;
+
+  const doc = () => documents.active;
+  const sel = () => documents.active.selection;
 
   /* ---------------------------------------------------------------- */
   /* DOM helpers                                                       */
@@ -77,37 +72,31 @@
   /* ---------------------------------------------------------------- */
 
   function pushHistory() {
-    undoStack.push(JSON.stringify(automaton.toJSON()));
-    if (undoStack.length > HISTORY_LIMIT) undoStack.shift();
-    redoStack = [];
+    pushDocumentHistory(doc());
     updateHistoryButtons();
   }
 
   function undo() {
-    if (!undoStack.length) return;
-    redoStack.push(JSON.stringify(automaton.toJSON()));
-    automaton = Automaton.fromJSON(JSON.parse(undoStack.pop()));
-    afterModelSwap();
+    if (undoDocument(doc())) afterModelSwap();
   }
 
   function redo() {
-    if (!redoStack.length) return;
-    undoStack.push(JSON.stringify(automaton.toJSON()));
-    automaton = Automaton.fromJSON(JSON.parse(redoStack.pop()));
-    afterModelSwap();
+    if (redoDocument(doc())) afterModelSwap();
   }
 
   function updateHistoryButtons() {
-    $("btn-undo").disabled = undoStack.length === 0;
-    $("btn-redo").disabled = redoStack.length === 0;
+    $("btn-undo").disabled = doc().undoStack.length === 0;
+    $("btn-redo").disabled = doc().redoStack.length === 0;
   }
 
+  /** The active document's automaton object was replaced (undo, redo...). */
   function afterModelSwap() {
-    selectedState = null;
-    selectedSymbol = null;
-    selectedTransition = null;
+    const selection = sel();
+    selection.state = null;
+    selection.symbol = null;
+    selection.transition = null;
     resetSimulation();
-    graph.automaton = automaton;
+    graph.automaton = doc().automaton;
     graph.selectedState = null;
     refresh();
     updateHistoryButtons();
@@ -118,13 +107,14 @@
   /* ---------------------------------------------------------------- */
 
   function refresh() {
+    const automaton = doc().automaton;
     const report = analyzeProperties(automaton);
 
     // Assign diagnostics straight onto the view, then draw once.
     graph.automaton = automaton;
     graph.deadStates = report.deadStates;
     graph.unreachableStates = report.unreachableStates;
-    graph.selectedState = selectedState;
+    graph.selectedState = sel().state;
     graph.render();
 
     renderStatesList(report);
@@ -134,12 +124,15 @@
     renderProperties(report);
     renderBadge();
 
-    $("input-name").value = automaton.name;
+    if (document.activeElement !== $("input-name")) $("input-name").value = automaton.name;
     $("canvas-empty").hidden = automaton.states.length > 0;
     updateEditorButtons();
+    renderDocTabs();
+    scheduleSave();
   }
 
   function renderBadge() {
+    const automaton = doc().automaton;
     const badge = $("badge-type");
     if (!automaton.states.length) {
       badge.textContent = "—";
@@ -152,6 +145,7 @@
   }
 
   function renderStatesList(report) {
+    const automaton = doc().automaton;
     const list = $("list-states");
     list.textContent = "";
     if (!automaton.states.length) {
@@ -161,7 +155,7 @@
     for (const state of automaton.states) {
       const li = document.createElement("li");
       li.dataset.state = state;
-      if (state === selectedState) li.classList.add("selected");
+      if (state === sel().state) li.classList.add("selected");
 
       const tags = [];
       if (automaton.startState === state) tags.push('<span class="tag start">START</span>');
@@ -174,7 +168,7 @@
         '<span class="tags">' + tags.join("") + "</span>";
 
       li.addEventListener("click", () => {
-        selectedState = state;
+        sel().state = state;
         graph.selectedState = state;
         graph.render();
         renderStatesList(report);
@@ -185,6 +179,7 @@
   }
 
   function renderAlphabetList() {
+    const automaton = doc().automaton;
     const list = $("list-alphabet");
     list.textContent = "";
     if (!automaton.alphabet.length) {
@@ -193,10 +188,10 @@
     }
     for (const symbol of automaton.alphabet) {
       const li = document.createElement("li");
-      if (symbol === selectedSymbol) li.classList.add("selected");
+      if (symbol === sel().symbol) li.classList.add("selected");
       li.innerHTML = "<span><code>" + escapeHtml(symbol) + "</code></span>";
       li.addEventListener("click", () => {
-        selectedSymbol = symbol;
+        sel().symbol = symbol;
         renderAlphabetList();
         updateEditorButtons();
       });
@@ -205,6 +200,7 @@
   }
 
   function renderTransitionSelects() {
+    const automaton = doc().automaton;
     const source = $("select-source");
     const target = $("select-target");
     const symbol = $("select-symbol");
@@ -231,6 +227,7 @@
   }
 
   function renderTransitionsList() {
+    const automaton = doc().automaton;
     const list = $("list-transitions");
     list.textContent = "";
     const rows = automaton.allTransitionRows();
@@ -241,12 +238,12 @@
     for (const row of rows) {
       const key = row.join(KEY_SEP);
       const li = document.createElement("li");
-      if (key === selectedTransition) li.classList.add("selected");
+      if (key === sel().transition) li.classList.add("selected");
       li.innerHTML =
         "<span><code>" + escapeHtml(row[0]) + "</code> —" +
         escapeHtml(row[1]) + "→ <code>" + escapeHtml(row[2]) + "</code></span>";
       li.addEventListener("click", () => {
-        selectedTransition = key;
+        sel().transition = key;
         renderTransitionsList();
         updateEditorButtons();
       });
@@ -269,6 +266,7 @@
   }
 
   function renderProperties(report) {
+    const automaton = doc().automaton;
     const body = $("properties-body");
 
     if (!automaton.states.length) {
@@ -318,6 +316,8 @@
   }
 
   function updateEditorButtons() {
+    const automaton = doc().automaton;
+    const { state: selectedState, symbol: selectedSymbol, transition: selectedTransition } = sel();
     const hasState = selectedState !== null && automaton.states.indexOf(selectedState) !== -1;
     $("btn-set-start").disabled = !hasState;
     $("btn-toggle-accept").disabled = !hasState;
@@ -339,6 +339,7 @@
   /* ---------------------------------------------------------------- */
 
   function addState() {
+    const automaton = doc().automaton;
     const input = $("input-state");
     const name = input.value.trim();
     if (!name) return toast("The state name cannot be empty.", "error");
@@ -355,58 +356,64 @@
     const x = (rect.width / 2 - graph.offsetX) / graph.scale + (Math.random() * 60 - 30);
     const y = (rect.height / 2 - graph.offsetY) / graph.scale + (Math.random() * 60 - 30);
     automaton.addState(name, [x, y]);
-    selectedState = name;
+    sel().state = name;
     input.value = "";
     resetSimulation();
     refresh();
   }
 
   function removeState() {
-    if (!selectedState) return;
+    const selection = sel();
+    if (!selection.state) return;
     pushHistory();
-    automaton.removeState(selectedState);
-    selectedState = null;
+    doc().automaton.removeState(selection.state);
+    selection.state = null;
     resetSimulation();
     refresh();
   }
 
   function renameState() {
-    if (!selectedState) return;
-    const next = window.prompt("New name for state " + selectedState + ":", selectedState);
+    const automaton = doc().automaton;
+    const selection = sel();
+    const current = selection.state;
+    if (!current) return;
+    const next = window.prompt("New name for state " + current + ":", current);
     if (next === null) return;
     const name = next.trim();
     if (!name) return toast("The state name cannot be empty.", "error");
     if (!STATE_NAME_RE.test(name)) {
       return toast("Only letters, digits, '_' and '-' are allowed.", "error");
     }
-    if (name !== selectedState && automaton.states.indexOf(name) !== -1) {
+    if (name !== current && automaton.states.indexOf(name) !== -1) {
       return toast('State "' + name + '" already exists.', "error");
     }
     pushHistory();
-    automaton.renameState(selectedState, name);
-    selectedState = name;
+    automaton.renameState(current, name);
+    selection.state = name;
     resetSimulation();
     refresh();
   }
 
   function setStartState() {
-    if (!selectedState) return;
+    const state = sel().state;
+    if (!state) return;
     pushHistory();
-    automaton.setStartState(selectedState);
+    doc().automaton.setStartState(state);
     resetSimulation();
     refresh();
   }
 
   function toggleAccept(state) {
-    const target = state || selectedState;
+    const target = state || sel().state;
     if (!target) return;
     pushHistory();
-    automaton.toggleAcceptState(target);
+    doc().automaton.toggleAcceptState(target);
     resetSimulation();
     refresh();
   }
 
   function addSymbol() {
+    const automaton = doc().automaton;
     const input = $("input-symbol");
     const symbol = input.value.trim();
     const problem = symbolProblem(symbol);
@@ -422,10 +429,11 @@
   }
 
   function removeSymbol() {
-    if (!selectedSymbol) return;
+    const selection = sel();
+    if (!selection.symbol) return;
     pushHistory();
-    automaton.removeSymbol(selectedSymbol);
-    selectedSymbol = null;
+    doc().automaton.removeSymbol(selection.symbol);
+    selection.symbol = null;
     resetSimulation();
     refresh();
   }
@@ -437,22 +445,23 @@
     if (!source || !target) return toast("Create at least one state first.", "error");
     try {
       pushHistory();
-      automaton.addTransition(source, symbol, target);
+      doc().automaton.addTransition(source, symbol, target);
       resetSimulation();
       refresh();
     } catch (err) {
-      undoStack.pop();
+      doc().undoStack.pop();
       updateHistoryButtons();
       toast(err.message, "error");
     }
   }
 
   function removeTransition() {
-    if (!selectedTransition) return;
-    const parts = selectedTransition.split(KEY_SEP);
+    const selection = sel();
+    if (!selection.transition) return;
+    const parts = selection.transition.split(KEY_SEP);
     pushHistory();
-    automaton.removeTransition(parts[0], parts[1], parts[2]);
-    selectedTransition = null;
+    doc().automaton.removeTransition(parts[0], parts[1], parts[2]);
+    selection.transition = null;
     resetSimulation();
     refresh();
   }
@@ -461,14 +470,20 @@
   /* Simulation                                                        */
   /* ---------------------------------------------------------------- */
 
+  /** Forget the active document's run and clear the simulation bar. */
   function resetSimulation() {
     stopAuto();
-    simResult = null;
-    simIndex = 0;
+    const sim = doc().sim;
+    sim.result = null;
+    sim.index = 0;
     if (graph) {
       graph.highlightedStates = new Set();
       graph.highlightedEdges = new Set();
     }
+    clearSimulationBar();
+  }
+
+  function clearSimulationBar() {
     $("sim-verdict").textContent = "";
     $("sim-verdict").className = "verdict";
     $("sim-step").textContent = "Enter a string and press Simulate.";
@@ -483,10 +498,14 @@
 
   function runSimulation() {
     stopAuto();
+    const automaton = doc().automaton;
+    const sim = doc().sim;
     const input = $("input-string").value;
+    sim.input = input;
 
     const errors = automaton.validate();
     if (errors.length) {
+      sim.result = null;
       $("sim-verdict").textContent = "Invalid automaton";
       $("sim-verdict").className = "verdict error";
       $("sim-step").textContent = errors[0];
@@ -494,13 +513,14 @@
       return;
     }
 
-    simResult = simulate(automaton, input);
-    simIndex = 0;
+    sim.result = simulate(automaton, input);
+    sim.index = 0;
 
-    if (simResult.error) {
+    if (sim.result.error) {
       $("sim-verdict").textContent = "Error";
       $("sim-verdict").className = "verdict error";
-      $("sim-step").textContent = simResult.error;
+      $("sim-step").textContent = sim.result.error;
+      sim.result = null;
       graph.clearHighlight();
       setStepButtons(false);
       return;
@@ -508,11 +528,14 @@
 
     setStepButtons(true);
     // Jump straight to the outcome, then let the user walk back through it.
-    simIndex = simResult.steps.length - 1;
+    sim.index = sim.result.steps.length - 1;
     renderSimStep();
   }
 
   function renderSimStep() {
+    const sim = doc().sim;
+    const simResult = sim.result;
+    const simIndex = sim.index;
     if (!simResult || !simResult.steps.length) return;
     const step = simResult.steps[simIndex];
 
@@ -558,6 +581,7 @@
       verdict.className = "verdict";
     }
 
+    setStepButtons(true);
     $("btn-step-prev").disabled = simIndex === 0;
     $("btn-step-first").disabled = simIndex === 0;
     $("btn-step-next").disabled = atEnd;
@@ -565,8 +589,9 @@
   }
 
   function goToStep(index) {
-    if (!simResult) return;
-    simIndex = Math.max(0, Math.min(simResult.steps.length - 1, index));
+    const sim = doc().sim;
+    if (!sim.result) return;
+    sim.index = Math.max(0, Math.min(sim.result.steps.length - 1, index));
     renderSimStep();
   }
 
@@ -581,13 +606,14 @@
 
   function toggleAuto() {
     if (autoTimer) return stopAuto();
-    if (!simResult) return;
-    if (simIndex >= simResult.steps.length - 1) simIndex = 0;
+    const sim = doc().sim;
+    if (!sim.result) return;
+    if (sim.index >= sim.result.steps.length - 1) sim.index = 0;
     $("btn-step-auto").textContent = "⏸ Pause";
     renderSimStep();
     autoTimer = setInterval(() => {
-      if (!simResult || simIndex >= simResult.steps.length - 1) return stopAuto();
-      simIndex += 1;
+      if (!sim.result || sim.index >= sim.result.steps.length - 1) return stopAuto();
+      sim.index += 1;
       renderSimStep();
     }, 900);
   }
@@ -609,6 +635,7 @@
   }
 
   function runNfaToDfa() {
+    const automaton = doc().automaton;
     const errors = automaton.validate();
     if (errors.length) return conversionError(errors[0]);
     let result;
@@ -644,6 +671,7 @@
   }
 
   function runMinimize() {
+    const automaton = doc().automaton;
     const errors = automaton.validate();
     if (errors.length) return conversionError(errors[0]);
     let result;
@@ -680,7 +708,7 @@
   }
 
   function runDfaToNfa() {
-    const result = dfaToNfa(automaton);
+    const result = dfaToNfa(doc().automaton);
     showConversion(
       '<p class="hint">Every DFA is already a valid NFA. This produces an equivalent copy ' +
       "labelled as an NFA, ready to extend with non-deterministic or ε-transitions.</p>",
@@ -688,22 +716,22 @@
     );
   }
 
+  /** "Open in new tab": the result gets its own tab; the original is untouched. */
   function applyConversion() {
-    if (!pendingConversion) return;
-    pushHistory();
-    automaton = pendingConversion;
+    const result = pendingConversion;
+    if (!result) return;
+    const sourceName = doc().automaton.name;
+    // Conversions invent new state names with no coordinates: lay them out.
+    result.positions = {};
+    openInTab(result, { layout: true, forceNew: true });
+    showConversionHint("Opened in a new tab, next to \u201c" + sourceName + "\u201d.");
+    toast("Result opened in a new tab.", "ok");
+  }
+
+  function showConversionHint(message) {
     pendingConversion = null;
     $("btn-apply-conversion").hidden = true;
-    $("convert-body").innerHTML = '<p class="hint">Applied. The diagram now shows the result.</p>';
-    selectedState = null;
-    selectedTransition = null;
-    resetSimulation();
-    graph.automaton = automaton;
-    // Conversions invent new state names with no coordinates: lay them out.
-    automaton.positions = {};
-    refresh();
-    graph.autoLayout();
-    toast("Result applied as the current automaton.", "ok");
+    $("convert-body").innerHTML = '<p class="hint">' + escapeHtml(message) + "</p>";
   }
 
   /* ---------------------------------------------------------------- */
@@ -712,20 +740,19 @@
 
   /** Toolbar "Auto-sort": undoable, so Ctrl+Z restores the previous positions. */
   function autoSort() {
-    if (!automaton.states.length) return;
+    if (!doc().automaton.states.length) return;
     pushHistory();
     graph.autoLayout();
   }
 
+  /** Toolbar "New" and the tab strip "+": always a fresh, empty tab. */
   function newAutomaton() {
-    if (automaton.states.length && !window.confirm("Discard the current automaton?")) return;
-    pushHistory();
-    automaton = new Automaton({ name: "Untitled automaton" });
-    afterModelSwap();
-    toast("New empty automaton.", "ok");
+    openInTab(null, { forceNew: true });
+    $("input-state").focus();
   }
 
   function saveFile() {
+    const automaton = doc().automaton;
     const data = JSON.stringify(automaton.toJSON(), null, 2);
     downloadBlob(new Blob([data], { type: "application/json" }),
       safeFilename(automaton.name) + ".afjson");
@@ -740,11 +767,9 @@
         if (!data || !Array.isArray(data.states)) {
           throw new Error("This file is not a valid .afjson automaton.");
         }
-        pushHistory();
-        automaton = Automaton.fromJSON(data);
-        afterModelSwap();
-        graph.fitView();
-        toast('Loaded "' + automaton.name + '".', "ok");
+        const automaton = Automaton.fromJSON(data);
+        openInTab(automaton);
+        toast('Opened "' + automaton.name + '".', "ok");
       } catch (err) {
         toast("Could not read the file: " + err.message, "error");
       }
@@ -765,7 +790,7 @@
   function currentImport() {
     const parsed = parseImport($("import-text").value);
     const usable = !parsed.empty && !parsed.errors.length;
-    return { parsed: parsed, result: usable ? applyImport(automaton, parsed) : null };
+    return { parsed: parsed, result: usable ? applyImport(doc().automaton, parsed) : null };
   }
 
   function renderImportPreview() {
@@ -782,7 +807,8 @@
 
     const full = parsed.mode === "full";
     let html = '<h4>Mode</h4><p class="import-mode ' + parsed.mode + '">' +
-      (full ? "Full import — replaces current automaton" : "Merge into current automaton") + "</p>";
+      (full ? (isBlankDocument(doc()) ? "Full import — fills this empty tab"
+          : "Full import — opens in a new tab") : "Merge into current automaton") + "</p>";
 
     html += "<h4>Contents</h4><p>" +
       plural(parsed.states.length, "state") + " · " +
@@ -847,13 +873,18 @@
     const result = currentImport().result;
     if (!result) return;
 
-    // One history entry covers the import and the layout that follows it.
-    pushHistory();
-    automaton = result.automaton;
-    afterModelSwap();
-    if (result.needsLayout) graph.autoLayout();
-    else graph.fitView();
     closeImportDialog();
+    if (result.mode === "full") {
+      // A full import is a new document, like Open: a new tab unless this one is blank.
+      openInTab(result.automaton, { layout: result.needsLayout });
+    } else {
+      // A merge edits this document; one history entry covers it and its layout.
+      pushHistory();
+      doc().automaton = result.automaton;
+      afterModelSwap();
+      if (result.needsLayout) graph.autoLayout();
+      else graph.fitView();
+    }
 
     const a = result.added;
     toast(result.mode === "full"
@@ -895,6 +926,7 @@
   }
 
   function exportPng() {
+    const automaton = doc().automaton;
     if (!automaton.states.length) return toast("Nothing to export yet.", "error");
     const background = isDark() ? "#14161a" : "#ffffff";
     graph
@@ -908,6 +940,7 @@
 
   /** Opens a print-ready report; the browser's print dialog saves it as PDF. */
   function exportReport() {
+    const automaton = doc().automaton;
     if (!automaton.states.length) return toast("Nothing to report yet.", "error");
     const report = analyzeProperties(automaton);
     const svg = graph.toStandaloneSvg("#ffffff");
@@ -967,7 +1000,199 @@
   }
 
   /* ---------------------------------------------------------------- */
-  /* Theme                                                             */
+  /* Document tabs                                                     */
+  /* ---------------------------------------------------------------- */
+
+  // The example shown on a first visit, before anything has been autosaved.
+  const FIRST_RUN_EXAMPLE = "DFA: ends with 1";
+  const DEFAULT_CONVERT_HINT = "Run a conversion to see the full process here, then open the result in a new tab.";
+
+  let saveTimer = null;
+  let scrolledTabId = null;
+
+  function currentView() {
+    return { scale: graph.scale, offsetX: graph.offsetX, offsetY: graph.offsetY };
+  }
+
+  /** Park what lives in the DOM or the view (zoom/pan, typed input) on the active document. */
+  function leaveDocument() {
+    stopAuto();
+    const current = doc();
+    if (!current) return;
+    current.view = currentView();
+    current.sim.input = $("input-string").value;
+  }
+
+  /** Put the active document on screen: diagram, view, panels, simulation, history. */
+  function showDocument() {
+    stopAuto();
+    const current = doc();
+    graph.automaton = current.automaton;
+    graph.selectedState = current.selection.state;
+    graph.highlightedStates = new Set();
+    graph.highlightedEdges = new Set();
+    $("input-string").value = current.sim.input;
+    $("input-name").value = current.automaton.name;
+    showConversionHint(DEFAULT_CONVERT_HINT);
+
+    refresh();
+    if (current.view) {
+      graph.scale = current.view.scale;
+      graph.offsetX = current.view.offsetX;
+      graph.offsetY = current.view.offsetY;
+      graph.applyTransform();
+    } else {
+      graph.fitView();
+    }
+    if (current.sim.result) renderSimStep();
+    else clearSimulationBar();
+    updateHistoryButtons();
+  }
+
+  /**
+   * Show `automaton` in a tab: the current one if it is blank (no states, no
+   * history), otherwise a new one. `forceNew` always opens a new tab;
+   * `layout` runs Auto-sort on it first.
+   */
+  function openInTab(automaton, options) {
+    const opts = options || {};
+    leaveDocument();
+    if (opts.forceNew) documents.add(automaton);
+    else documents.open(automaton);
+    showDocument();
+    if (opts.layout) graph.autoLayout();
+  }
+
+  function switchToDocument(id) {
+    if (id === documents.activeId) return;
+    leaveDocument();
+    documents.activate(id);
+    showDocument();
+  }
+
+  function closeDocument(id) {
+    const target = documents.find(id);
+    if (!target) return;
+    if (target.automaton.states.length &&
+        !window.confirm('Close "' + target.automaton.name + '"? Its automaton and undo history will be lost.')) {
+      return;
+    }
+    if (id !== documents.activeId) {
+      documents.close(id);
+      renderDocTabs();
+      scheduleSave();
+      return;
+    }
+    stopAuto();
+    documents.close(id);
+    showDocument();
+  }
+
+  function renderDocTabs() {
+    const strip = $("doc-tabs");
+    strip.textContent = "";
+    for (const d of documents.documents) {
+      const active = d.id === documents.activeId;
+      const name = d.automaton.name || DEFAULT_DOCUMENT_NAME;
+
+      const tab = document.createElement("div");
+      tab.className = "doc-tab" + (active ? " active" : "");
+      tab.setAttribute("role", "tab");
+      tab.setAttribute("aria-selected", active ? "true" : "false");
+      tab.tabIndex = active ? 0 : -1;
+      tab.title = name;
+      tab.dataset.doc = String(d.id);
+
+      const label = document.createElement("span");
+      label.className = "doc-tab-label";
+      label.textContent = name;
+
+      const close = document.createElement("button");
+      close.type = "button";
+      close.className = "doc-tab-close";
+      close.title = "Close tab";
+      close.setAttribute("aria-label", "Close " + name);
+      close.textContent = "×";
+      close.addEventListener("click", (e) => {
+        e.stopPropagation();
+        closeDocument(d.id);
+      });
+
+      tab.addEventListener("click", () => switchToDocument(d.id));
+      tab.addEventListener("auxclick", (e) => {
+        if (e.button === 1) closeDocument(d.id); // middle click closes, as in browsers
+      });
+      tab.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          switchToDocument(d.id);
+        }
+      });
+
+      tab.appendChild(label);
+      tab.appendChild(close);
+      strip.appendChild(tab);
+
+      // Keep a newly activated tab visible when the strip overflows.
+      if (active && scrolledTabId !== d.id) {
+        scrolledTabId = d.id;
+        tab.scrollIntoView({ block: "nearest", inline: "nearest" });
+      }
+    }
+    updateTabOverflow();
+  }
+
+  /** Fade whichever edge of the strip hides more tabs. */
+  function updateTabOverflow() {
+    const strip = $("doc-tabs");
+    const hiddenRight = strip.scrollWidth - strip.clientWidth - strip.scrollLeft;
+    strip.classList.toggle("more-left", strip.scrollLeft > 1);
+    strip.classList.toggle("more-right", hiddenRight > 1);
+  }
+
+  function initDocTabs() {
+    const strip = $("doc-tabs");
+    strip.addEventListener("scroll", updateTabOverflow);
+    window.addEventListener("resize", updateTabOverflow);
+    // A plain mouse wheel scrolls the strip sideways.
+    strip.addEventListener("wheel", (e) => {
+      if (e.deltaX || !e.deltaY || strip.scrollWidth <= strip.clientWidth) return;
+      e.preventDefault();
+      strip.scrollLeft += e.deltaY;
+    }, { passive: false });
+    $("btn-new-tab").addEventListener("click", newAutomaton);
+  }
+
+  /* ----------------------------- autosave -------------------------- */
+
+  function scheduleSave() {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(saveNow, 400);
+  }
+
+  /** Persist every tab (not the undo history) to localStorage. */
+  function saveNow() {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+    if (!doc() || !graph) return;
+    doc().view = currentView();
+    try {
+      documents.save(window.localStorage);
+    } catch (err) {
+      /* storage disabled: tabs simply will not survive a reload */
+    }
+  }
+
+  function loadStoredDocuments() {
+    try {
+      return DocumentList.load(window.localStorage);
+    } catch (err) {
+      return null;
+    }
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* Theme                                                            */
   /* ---------------------------------------------------------------- */
 
   function isDark() {
@@ -1032,10 +1257,7 @@
     select.addEventListener("change", () => {
       const key = select.value;
       if (!key) return;
-      pushHistory();
-      automaton = Automaton.fromJSON(EXAMPLES[key]);
-      afterModelSwap();
-      graph.fitView();
+      openInTab(Automaton.fromJSON(EXAMPLES[key]));
       select.value = "";
       toast('Loaded example: "' + key + '".', "ok");
     });
@@ -1065,11 +1287,11 @@
       if (e.key === "Enter") runSimulation();
     });
     $("btn-step-first").addEventListener("click", () => { stopAuto(); goToStep(0); });
-    $("btn-step-prev").addEventListener("click", () => { stopAuto(); goToStep(simIndex - 1); });
-    $("btn-step-next").addEventListener("click", () => { stopAuto(); goToStep(simIndex + 1); });
+    $("btn-step-prev").addEventListener("click", () => { stopAuto(); goToStep(doc().sim.index - 1); });
+    $("btn-step-next").addEventListener("click", () => { stopAuto(); goToStep(doc().sim.index + 1); });
     $("btn-step-last").addEventListener("click", () => {
       stopAuto();
-      goToStep(simResult ? simResult.steps.length - 1 : 0);
+      goToStep(doc().sim.result ? doc().sim.result.steps.length - 1 : 0);
     });
     $("btn-step-auto").addEventListener("click", toggleAuto);
 
@@ -1093,15 +1315,21 @@
     $("btn-redo").addEventListener("click", redo);
 
     $("btn-layout").addEventListener("click", autoSort);
-    $("btn-fit").addEventListener("click", () => graph.fitView());
-    $("btn-zoom-in").addEventListener("click", () => graph.zoomBy(1.2));
-    $("btn-zoom-out").addEventListener("click", () => graph.zoomBy(1 / 1.2));
+    $("btn-fit").addEventListener("click", () => { graph.fitView(); scheduleSave(); });
+    $("btn-zoom-in").addEventListener("click", () => { graph.zoomBy(1.2); scheduleSave(); });
+    $("btn-zoom-out").addEventListener("click", () => { graph.zoomBy(1 / 1.2); scheduleSave(); });
 
     $("btn-theme").addEventListener("click", () => applyTheme(!isDark()));
     $("btn-help").addEventListener("click", () => $("help-dialog").showModal());
 
+    // The tab label follows the name as it is typed; blur tidies an empty name.
+    $("input-name").addEventListener("input", () => {
+      doc().automaton.name = $("input-name").value.trim() || DEFAULT_DOCUMENT_NAME;
+      renderDocTabs();
+      scheduleSave();
+    });
     $("input-name").addEventListener("change", () => {
-      automaton.name = $("input-name").value.trim() || "Untitled automaton";
+      $("input-name").value = doc().automaton.name;
     });
 
     document.addEventListener("keydown", (e) => {
@@ -1114,18 +1342,18 @@
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") {
         e.preventDefault();
         redo();
-      } else if (!typing && simResult && e.key === "ArrowLeft") {
+      } else if (!typing && doc().sim.result && e.key === "ArrowLeft") {
         stopAuto();
-        goToStep(simIndex - 1);
-      } else if (!typing && simResult && e.key === "ArrowRight") {
+        goToStep(doc().sim.index - 1);
+      } else if (!typing && doc().sim.result && e.key === "ArrowRight") {
         stopAuto();
-        goToStep(simIndex + 1);
+        goToStep(doc().sim.index + 1);
       }
     });
 
     window.addEventListener("resize", () => {
       // Keep the diagram usable when the layout reflows.
-      if (automaton.states.length) graph.applyTransform();
+      if (doc().automaton.states.length) graph.applyTransform();
     });
   }
 
@@ -1135,9 +1363,10 @@
 
   function init() {
     graph = new GraphView($("canvas"), {
-      onStateMoved: () => { /* positions are mutated in place by the view */ },
+      // Positions are mutated in place by the view; just persist them.
+      onStateMoved: () => scheduleSave(),
       onStateSelected: (state) => {
-        selectedState = state;
+        sel().state = state;
         refresh();
       },
       onStateDoubleClick: (state) => toggleAccept(state),
@@ -1147,15 +1376,19 @@
     initExamples();
     initEvents();
     initImportDialog();
+    initDocTabs();
     initTheme();
 
-    // Open on a worked example rather than an empty canvas.
-    automaton = Automaton.fromJSON(EXAMPLES["DFA: ends with 1"]);
-    graph.automaton = automaton;
-    refresh();
-    graph.fitView();
-    resetSimulation();
-    updateHistoryButtons();
+    // Restore the tabs from the last visit; on a first visit (or if the stored
+    // data is unreadable) open on a worked example rather than an empty canvas.
+    documents = loadStoredDocuments() || new DocumentList();
+    if (!documents.documents.length) documents.add(Automaton.fromJSON(EXAMPLES[FIRST_RUN_EXAMPLE]));
+    showDocument();
+
+    window.addEventListener("pagehide", saveNow);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") saveNow();
+    });
   }
 
   if (document.readyState === "loading") {
