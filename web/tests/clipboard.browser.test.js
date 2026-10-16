@@ -30,7 +30,10 @@ const path = require("node:path");
         return qa.svg;
       };
     });
-    const shot = (name) => page.screenshot({ path: path.join(out, name + ".png") });
+    const shot = async (name) => {
+      await page.waitForTimeout(250); // let toast and layout transitions settle
+      await page.screenshot({ path: path.join(out, name + ".png") });
+    };
     const copied = () => page.waitForFunction(() => document.querySelector("#toast").textContent === "Image copied.");
     const fallback = () => page.locator("#copy-image-dialog").waitFor({ state: "visible" });
     const stub = (mode) => page.evaluate((mode) => {
@@ -126,6 +129,8 @@ const path = require("node:path");
     assert.equal(image.width, image.expectedWidth);
     assert.equal(image.height, image.expectedHeight);
     assert.deepEqual(image.pixel, [255, 255, 255, 255]);
+    const cleanBytes = await page.evaluate(async () => Array.from(new Uint8Array(await (await qa.item.getType("image/png")).arrayBuffer())));
+    await fs.writeFile(path.join(out, "clean-simulation.png"), Buffer.from(cleanBytes));
     await page.evaluate(() => qa.resolve());
     await copied();
     await page.waitForFunction(() => !document.querySelector("#btn-copy-image").disabled);
