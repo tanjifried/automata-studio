@@ -319,6 +319,8 @@ class GraphView {
   createEdge(source, target, label, curvature, isSelfLoop) {
     const path = svgEl("path", {
       fill: "none",
+      "data-edge-source": source,
+      "data-edge-target": target,
       stroke: this.edgeColor,
       "stroke-width": 2,
       "marker-end": "url(#" + this.arrowMarker + ")",
@@ -505,6 +507,7 @@ class GraphView {
     if (isSelected) {
       group.appendChild(
         svgEl("circle", {
+          "data-selection": "true",
           r: STATE_RADIUS + 6,
           fill: "none",
           stroke: GRAPH_COLORS.startRing,
@@ -694,10 +697,10 @@ class GraphView {
     this.applyEdgeHighlight();
   }
 
-  applyEdgeHighlight() {
-    for (const record of this.edgeRecords) {
+  applyEdgeHighlight(includeHover = true, records = this.edgeRecords) {
+    for (const record of records) {
       const key = record.source + KEY_SEP + record.target;
-      const hover = this.hoverEdges.has(key);
+      const hover = includeHover && this.hoverEdges.has(key);
       const sim = this.highlightedEdges.has(key);
       let color = this.edgeColor;
       let marker = this.arrowMarker;
@@ -727,7 +730,7 @@ class GraphView {
   /* ---------------------------------------------------------------- */
 
   /** Serialize the current diagram into a standalone SVG string. */
-  toStandaloneSvg(backgroundColor) {
+  toStandaloneSvg(backgroundColor, options) {
     const bounds = this.contentBounds() || { x: 0, y: 0, width: 400, height: 300 };
     const clone = this.svg.cloneNode(true);
     clone.setAttribute("xmlns", SVG_NS);
@@ -739,6 +742,17 @@ class GraphView {
     );
     const viewport = clone.querySelector("#viewport");
     if (viewport) viewport.removeAttribute("transform");
+
+    if (options && options.clean) {
+      // Clean only the snapshot: live selection and table hover stay intact.
+      clone.querySelectorAll("[data-selection]").forEach((node) => node.remove());
+      const records = Array.from(clone.querySelectorAll("path[data-edge-source]")).map((path) => {
+        const source = path.getAttribute("data-edge-source");
+        const target = path.getAttribute("data-edge-target");
+        return { source, target, path, text: path.nextElementSibling };
+      });
+      this.applyEdgeHighlight(false, records);
+    }
 
     const bg = svgEl("rect", {
       x: bounds.x,
@@ -753,10 +767,10 @@ class GraphView {
   }
 
   /** Render the diagram to a PNG blob at the given pixel ratio. */
-  toPngBlob(backgroundColor, ratio) {
+  toPngBlob(backgroundColor, ratio, options) {
     const scale = ratio || 2;
     const bounds = this.contentBounds() || { x: 0, y: 0, width: 400, height: 300 };
-    const svgText = this.toStandaloneSvg(backgroundColor);
+    const svgText = this.toStandaloneSvg(backgroundColor, options);
     const blob = new Blob([svgText], { type: "image/svg+xml;charset=utf-8" });
     const url = URL.createObjectURL(blob);
 

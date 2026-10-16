@@ -23,12 +23,13 @@
     <span>AutomataStudio</span>
   </div>
 
-  <div class="toolbar-group">
+  <div class="toolbar-group file-actions">
     <button id="btn-new" class="ghost" title="New automaton in a new tab">New</button>
     <button id="btn-open" class="ghost" title="Open a .afjson file">Open</button>
     <button id="btn-save" class="ghost" title="Download as .afjson">Save</button>
     <button id="btn-import" class="ghost" title="Import from text or a file">Import</button>
     <button id="btn-export-png" class="ghost" title="Export the diagram as PNG">PNG</button>
+    <button id="btn-copy-image" class="ghost" title="Copy the full diagram as an image" disabled>Copy image</button>
     <button id="btn-report" class="ghost" title="Printable report (save as PDF)">Report</button>
   </div>
 
@@ -196,6 +197,7 @@
     <li><strong>Simulate</strong> — type a string and step through it. Active states and the edges just taken are highlighted in red.</li>
     <li><strong>Convert</strong> — subset construction, DFA minimization and the trivial DFA→NFA view. Each one shows its process; <em>Open in new tab</em> puts the result in its own tab and leaves the original untouched.</li>
     <li><strong>Tabs</strong> — each tab above the canvas holds one automaton with its own undo history, simulation and zoom. <em>+</em> or New opens an empty tab, × closes one. Open, Examples and a full Import open in a new tab (or fill the current one if it is empty). All tabs are saved in this browser automatically and come back when you reload; undo history does not.</li>
+    <li><strong>Copy image</strong> — copies the full active diagram at 2× resolution in the current theme, ready to paste. Simulation highlights and diagnostics are included; selection and hover outlines are omitted. If the browser cannot copy it, choose <em>Download PNG</em> in the message.</li>
     <li><strong>Files</strong> — Save downloads the active tab as a <code>.afjson</code> file, and Open reads the same format back in. Import takes a quick text definition (or pasted <code>.afjson</code>): with a <code>start:</code> line it is a new automaton, without one it is merged into the current tab.</li>
   </ol>
   <p class="hint">Keyboard: Ctrl+Z undo · Ctrl+Y redo (both act on the active tab) · Enter simulates · ← → step through a simulation (outside the transition table, where they move between cells) · middle-click a tab to close it.</p>
@@ -224,6 +226,16 @@ q1 eps q2      # eps or ε = epsilon"></textarea>
   <div class="dialog-actions">
     <button type="button" id="import-cancel" class="secondary">Cancel</button>
     <button type="button" id="import-apply" class="apply" disabled>Apply</button>
+  </div>
+</dialog>
+
+<dialog id="copy-image-dialog" class="dialog" aria-labelledby="copy-image-title">
+  <h2 id="copy-image-title">Image could not be copied</h2>
+  <p id="copy-image-error"></p>
+  <p>You can download the same image as a PNG instead.</p>
+  <div class="dialog-actions">
+    <button type="button" id="copy-image-close" class="secondary">Close</button>
+    <button type="button" id="copy-image-download" class="apply">Download PNG</button>
   </div>
 </dialog>
 

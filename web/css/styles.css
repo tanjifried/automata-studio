@@ -107,6 +107,8 @@ body {
   border-right: 1px solid var(--border);
 }
 
+.toolbar-group.file-actions { flex-wrap: wrap; max-width: 100%; }
+
 .toolbar-group:last-child { border-right: none; padding-right: 0; }
 .toolbar-end { margin-left: auto; border-right: none; }
 

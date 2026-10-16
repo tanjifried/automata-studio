@@ -21,6 +21,8 @@
   // UI-only state that is not per document.
   let autoTimer = null;
   let pendingConversion = null;
+  let copyingImage = false;
+  let copyImageFallback = null;
 
   const doc = () => documents.active;
   const sel = () => documents.active.selection;
@@ -264,6 +266,9 @@
 
   function updateEditorButtons() {
     const automaton = doc().automaton;
+    $("btn-copy-image").disabled = copyingImage || !automaton.states.length;
+    $("btn-copy-image").textContent = copyingImage ? "Copying…" : "Copy image";
+    $("btn-copy-image").setAttribute("aria-busy", String(copyingImage));
     const { state: selectedState, symbol: selectedSymbol } = sel();
     const hasState = selectedState !== null && automaton.states.indexOf(selectedState) !== -1;
     $("btn-set-start").disabled = !hasState;
@@ -1448,6 +1453,50 @@
       .catch((err) => toast(err.message, "error"));
   }
 
+  /** Start the clipboard write in the click event, before PNG rendering awaits. */
+  async function copyImage() {
+    if (copyingImage || !doc().automaton.states.length) return;
+    copyingImage = true;
+    copyImageFallback = null;
+    clearTimeout(toastTimer);
+    $("toast").className = "toast";
+    $("toast").textContent = "";
+    updateEditorButtons();
+    const filename = safeFilename(doc().automaton.name) + ".png";
+    let png;
+    try {
+      const background = isDark() ? "#14161a" : "#ffffff";
+      png = graph.toPngBlob(background, 2, { clean: true });
+      // Some browsers reject the write before consuming the image promise.
+      png.catch(() => {});
+      if (!window.isSecureContext || !navigator.clipboard ||
+          typeof navigator.clipboard.write !== "function" ||
+          typeof ClipboardItem === "undefined" ||
+          (ClipboardItem.supports && !ClipboardItem.supports("image/png"))) {
+        throw new Error("This browser cannot copy images here. Try a supported browser over HTTPS.");
+      }
+      // A promised Blob preserves the user gesture while the image renders.
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": png })]);
+      toast("Image copied.", "ok");
+    } catch (err) {
+      try {
+        if (!png) throw err;
+        const blob = await png;
+        copyImageFallback = { blob, filename };
+        $("copy-image-error").textContent = err.name === "NotAllowedError"
+          ? "Clipboard access was denied. Allow clipboard access in your browser and try again."
+          : err.message || "Your browser could not write the image to the clipboard.";
+        $("copy-image-dialog").showModal();
+        $("copy-image-download").focus();
+      } catch (renderError) {
+        toast("Could not prepare the image. " + renderError.message, "error");
+      }
+    } finally {
+      copyingImage = false;
+      updateEditorButtons();
+    }
+  }
+
   /** Opens a print-ready report; the browser's print dialog saves it as PDF. */
   function exportReport() {
     const automaton = doc().automaton;
@@ -1820,6 +1869,15 @@
     $("btn-new").addEventListener("click", newAutomaton);
     $("btn-save").addEventListener("click", saveFile);
     $("btn-export-png").addEventListener("click", exportPng);
+    $("btn-copy-image").addEventListener("click", copyImage);
+    $("copy-image-close").addEventListener("click", () => $("copy-image-dialog").close());
+    $("copy-image-download").addEventListener("click", () => {
+      if (!copyImageFallback) return;
+      downloadBlob(copyImageFallback.blob, copyImageFallback.filename);
+      $("copy-image-dialog").close();
+      toast("Diagram exported as PNG.", "ok");
+    });
+    $("copy-image-dialog").addEventListener("close", () => { copyImageFallback = null; });
     $("btn-report").addEventListener("click", exportReport);
     $("btn-open").addEventListener("click", () => $("file-input").click());
     $("file-input").addEventListener("change", (e) => {
