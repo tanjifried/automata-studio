@@ -21,7 +21,10 @@ Forked from [ReyEscarlata0/automata-studio](https://github.com/ReyEscarlata0/aut
 
 **Editing**
 - Visual editor for states, alphabet and transitions, with ε-transitions
-- Interactive canvas: drag states, zoom with the scroll wheel, pan, circular auto-layout
+- Interactive canvas: drag states, zoom with the scroll wheel, pan
+- **Auto-sort**: a layered left-to-right layout by distance from the start
+  state, with fewer edge crossings; unreachable and dead states go in the last
+  column. Undoable with Ctrl+Z
 - Accepting states, start state, renaming, undo/redo
 - Live validation with clear error messages
 
@@ -39,8 +42,31 @@ Forked from [ReyEscarlata0/automata-studio](https://github.com/ReyEscarlata0/aut
 - Property report: deterministic, complete, connected, ε-transitions,
   unreachable states, dead states and missing transitions
 
+**Documents**
+- **Tabs**: open several automata side by side. Each tab keeps its own undo
+  history, simulation, selection and zoom; the label follows the automaton's
+  name. Open, Examples, a full Import and conversion results open in a new tab
+  (or fill the current one if it is empty)
+- **Autosave**: every open tab (with positions, the active tab and each tab's
+  zoom) is saved in the browser's `localStorage` and restored on reload. Undo
+  history is not saved
+
 **Files**
-- Save and open `.afjson` projects
+- Save (active tab) and open `.afjson` projects
+- **Import dialog** with a live preview: type or paste a quick text
+  definition, paste `.afjson`, or drop a file. With a `start:` line it is a new
+  automaton; without one the lines are merged into the current tab:
+
+  ```
+  states: q0 q1 q2
+  alphabet: a b
+  start: q0
+  accept: q2
+  q0 a q1
+  q0 b q0
+  q1 a,b q2      # comma = several symbols
+  q1 eps q2      # eps or ε = epsilon
+  ```
 - Export the diagram to PNG
 - Printable report (diagram, properties and transition table) that the browser
   can save as PDF
@@ -57,7 +83,7 @@ Forked from [ReyEscarlata0/automata-studio](https://github.com/ReyEscarlata0/aut
 ## Tech stack
 
 Vanilla JavaScript (ES2020), inline SVG, CSS custom properties. No framework,
-no bundler, no dependencies: the browser loads five plain scripts and runs
+no bundler, no dependencies: the browser loads eight plain scripts and runs
 them.
 
 **CI/CD** — GitHub Actions runs the algorithm test suite on every push to
@@ -76,10 +102,13 @@ automata-studio/
     ├── js/
     │   ├── automaton.js     # Automaton data model (DFA and NFA in one class)
     │   ├── algorithms.js    # Simulation, subset construction, minimization, properties
+    │   ├── layout.js        # Layered Auto-sort layout
     │   ├── examples.js      # Preloaded example automata
+    │   ├── import.js        # Import dialog parser (text and .afjson) and merge
+    │   ├── documents.js     # Open tabs: per-tab history, autosave (no DOM)
     │   ├── graph.js         # SVG renderer: drag, zoom, pan, edge routing
-    │   └── app.js           # UI wiring, history, file I/O, export
-    └── tests/               # Node test suite for the algorithms
+    │   └── app.js           # UI wiring, tabs, file I/O, export
+    └── tests/               # Node test suite (algorithms, layout, import, tabs)
 ```
 
 The algorithm layer is deliberately pure: it takes an automaton and returns a
@@ -108,8 +137,15 @@ no modules or fetch calls that would trip over the `file://` origin.
 ## Tests
 
 ```bash
-node web/tests/run-tests.js      # 45 checks
+node web/tests/run-tests.js      # 249 checks in 4 suites
 ```
+
+| Suite | Checks |
+|---|---|
+| `algorithms.test.js` | 45 |
+| `layout.test.js` | 32 |
+| `import.test.js` | 102 |
+| `documents.test.js` | 70 |
 
 ---
 

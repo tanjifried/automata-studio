@@ -331,6 +331,91 @@ input[type="text"]:focus, select:focus {
   gap: 8px;
 }
 
+/* Document tabs: one per open automaton, scrolls sideways when crowded. */
+.doc-tabbar {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  min-width: 0;
+  margin-bottom: -8px; /* sit flush on the name row below */
+  border-bottom: 1px solid var(--border);
+}
+
+.doc-tabs {
+  display: flex;
+  gap: 2px;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+}
+
+.doc-tabs.more-right { mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent); }
+.doc-tabs.more-left { mask-image: linear-gradient(to left, #000 calc(100% - 40px), transparent); }
+.doc-tabs.more-left.more-right {
+  mask-image: linear-gradient(to right, transparent, #000 40px, #000 calc(100% - 40px), transparent);
+}
+
+.doc-tab {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+  max-width: 200px;
+  padding: 5px 4px 5px 11px;
+  border: 1px solid var(--border);
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  background: var(--panel-alt);
+  color: var(--text-dim);
+  font-size: 12.5px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.doc-tab:hover { color: var(--text); }
+.doc-tab:focus-visible { outline: 2px solid var(--warn); outline-offset: -2px; }
+
+.doc-tab.active {
+  background: var(--panel);
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+.doc-tab-label {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+button.doc-tab-close {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  line-height: 16px;
+  font-size: 14px;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  opacity: 0.55;
+}
+
+button.doc-tab-close:hover:not(:disabled) { background: var(--border); opacity: 1; }
+
+button.doc-tab-new {
+  flex: 0 0 auto;
+  margin-bottom: 3px;
+  padding: 2px 9px;
+  font-size: 15px;
+  line-height: 18px;
+  background: transparent;
+  color: var(--text-dim);
+}
+
+button.doc-tab-new:hover:not(:disabled) { background: var(--panel-alt); color: var(--text); }
+
 .canvas-header { display: flex; gap: 8px; align-items: center; }
 
 .name-input {
