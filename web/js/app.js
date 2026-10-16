@@ -717,6 +717,13 @@
   /* Files                                                             */
   /* ---------------------------------------------------------------- */
 
+  /** Toolbar "Auto-sort": undoable, so Ctrl+Z restores the previous positions. */
+  function autoSort() {
+    if (!automaton.states.length) return;
+    pushHistory();
+    graph.autoLayout();
+  }
+
   function newAutomaton() {
     if (automaton.states.length && !window.confirm("Discard the current automaton?")) return;
     pushHistory();
@@ -951,7 +958,7 @@
     $("btn-undo").addEventListener("click", undo);
     $("btn-redo").addEventListener("click", redo);
 
-    $("btn-layout").addEventListener("click", () => graph.autoLayout());
+    $("btn-layout").addEventListener("click", autoSort);
     $("btn-fit").addEventListener("click", () => graph.fitView());
     $("btn-zoom-in").addEventListener("click", () => graph.zoomBy(1.2));
     $("btn-zoom-out").addEventListener("click", () => graph.zoomBy(1 / 1.2));

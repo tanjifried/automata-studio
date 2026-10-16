@@ -1,10 +1,10 @@
 /**
  * SVG renderer for the automaton diagram.
  *
- * States are draggable
- * circles, transitions are straight lines, quadratic curves (when a pair of
- * states is connected both ways) or self-loops, and the whole scene pans and
- * zooms. Every visual attribute is written directly on the element rather
+ * States are draggable circles, transitions are straight lines, quadratic
+ * curves (when a pair of states is connected both ways, or when a straight
+ * line would run through another state) or self-loops, and the whole scene
+ * pans and zooms. Every visual attribute is written directly on the element rather
  * than through a CSS class, so the SVG can be serialized straight to PNG.
  */
 
@@ -151,30 +151,30 @@ class GraphView {
   /* Layout                                                            */
   /* ---------------------------------------------------------------- */
 
-  /** Circular auto-layout. */
+  /**
+   * Auto-sort: layered left-to-right layout (see layout.js). Replaces every
+   * position, then fits the view. Callers that want undo push history first.
+   */
   autoLayout() {
-    const automaton = this.automaton;
-    const n = automaton.states.length;
-    if (!n) return;
-    const radius = Math.max(150, 60 * n);
-    const cx = radius + 60;
-    const cy = radius + 60;
-    automaton.states.forEach((state, i) => {
-      const angle = (2 * Math.PI * i) / n;
-      automaton.positions[state] = [
-        cx + radius * Math.cos(angle),
-        cy + radius * Math.sin(angle),
-      ];
-    });
+    if (!this.automaton || !this.automaton.states.length) return;
+    this.automaton.positions = computeLayeredLayout(this.automaton);
     this.render();
     this.fitView();
   }
 
-  /** Give a circular position to any state that does not have one yet. */
+  /**
+   * Give a position to any state that does not have one yet. When nothing has
+   * a position (e.g. a file saved without coordinates) use the layered layout;
+   * otherwise place the few missing states on a circle, as before.
+   */
   ensurePositions() {
     const automaton = this.automaton;
     const missing = automaton.states.filter((s) => !(s in automaton.positions));
     if (!missing.length) return;
+    if (missing.length === automaton.states.length) {
+      automaton.positions = computeLayeredLayout(automaton);
+      return;
+    }
     const n = automaton.states.length;
     const radius = Math.max(150, 55 * n);
     const cx = radius + 60;
@@ -204,12 +204,33 @@ class GraphView {
       maxY = Math.max(maxY, p.y);
     }
     const pad = STATE_RADIUS + 70;
-    return {
-      x: minX - pad,
-      y: minY - pad,
-      width: maxX - minX + pad * 2,
-      height: maxY - minY + pad * 2,
-    };
+    minX -= pad;
+    minY -= pad;
+    maxX += pad;
+    maxY += pad;
+
+    // Curved edges, their labels and self-loops can reach well past the
+    // states, so also include everything actually drawn (plus a margin).
+    // getBBox() is in the viewport group's own coordinates, i.e. scene space.
+    const drawn = this.drawnBounds();
+    if (drawn) {
+      const margin = 24;
+      minX = Math.min(minX, drawn.x - margin);
+      minY = Math.min(minY, drawn.y - margin);
+      maxX = Math.max(maxX, drawn.x + drawn.width + margin);
+      maxY = Math.max(maxY, drawn.y + drawn.height + margin);
+    }
+    return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+  }
+
+  /** Bounding box of the rendered scene, or null when it cannot be measured. */
+  drawnBounds() {
+    try {
+      const box = this.viewport.getBBox();
+      return box.width || box.height ? box : null;
+    } catch (err) {
+      return null; // not rendered (e.g. display: none)
+    }
   }
 
   fitView() {
@@ -276,6 +297,7 @@ class GraphView {
   renderEdges() {
     const groups = this.groupedEdges();
     const pairKeys = new Set(groups.map((g) => g.source + KEY_SEP + g.target));
+    this.loopStates = new Set(groups.filter((g) => g.source === g.target).map((g) => g.source));
 
     for (const group of groups) {
       const isSelfLoop = group.source === group.target;
@@ -348,23 +370,85 @@ class GraphView {
     const start = { x: sp.x + ux * STATE_RADIUS, y: sp.y + uy * STATE_RADIUS };
     const end = { x: tp.x - ux * STATE_RADIUS, y: tp.y - uy * STATE_RADIUS };
     const mid = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 };
+    const curvature = this.routeCurvature(record, start, end, -uy * dist, ux * dist);
 
-    if (record.curvature) {
-      const perpX = -uy * dist * record.curvature;
-      const perpY = ux * dist * record.curvature;
+    if (curvature) {
+      const perpX = -uy * dist * curvature;
+      const perpY = ux * dist * curvature;
       const ctrl = { x: mid.x + perpX, y: mid.y + perpY };
       record.path.setAttribute(
         "d",
         "M " + start.x + " " + start.y + " Q " + ctrl.x + " " + ctrl.y + " " + end.x + " " + end.y
       );
-      // Label sits on the curve, slightly outside its apex.
-      record.text.setAttribute("x", mid.x + perpX * 0.62);
-      record.text.setAttribute("y", mid.y + perpY * 0.62);
+      // Label sits just outside the curve's apex (half way to the control point).
+      const side = curvature > 0 ? 1 : -1;
+      record.text.setAttribute("x", mid.x + perpX * 0.5 - uy * 14 * side);
+      record.text.setAttribute("y", mid.y + perpY * 0.5 + ux * 14 * side);
     } else {
       record.path.setAttribute("d", "M " + start.x + " " + start.y + " L " + end.x + " " + end.y);
       record.text.setAttribute("x", mid.x - uy * 14);
       record.text.setAttribute("y", mid.y + ux * 14 - 4);
     }
+  }
+
+  /**
+   * Pick the edge curvature. Bidirectional pairs keep their bend (0.22) and a
+   * lone edge stays straight, unless that shape would run through another
+   * state (back-edges and edges that skip a column after Auto-sort). Then
+   * the first candidate bend that clears every other state wins; a positive
+   * bend sends left-to-right edges below and right-to-left edges above, so
+   * forward and back edges do not stack. Deterministic for given positions.
+   */
+  routeCurvature(record, start, end, perpX, perpY) {
+    const candidates = record.curvature
+      ? [record.curvature, 0.4, 0.6, 0.8]
+      : [0, 0.25, -0.25, 0.45, -0.45, 0.7, -0.7];
+    let best = candidates[0];
+    let bestHits = Infinity;
+    for (const c of candidates) {
+      const hits = this.curveHits(record, start, end, perpX * c, perpY * c);
+      if (hits === 0) return c;
+      if (hits < bestHits) {
+        bestHits = hits;
+        best = c;
+      }
+    }
+    return best;
+  }
+
+  /**
+   * How many obstacles the quadratic curve start-ctrl-end passes through:
+   * other states, and the self-loops drawn above any state (including the
+   * edge's own ends, so an edge does not enter a state through its loop).
+   */
+  curveHits(record, start, end, offX, offY) {
+    const ctrl = { x: (start.x + end.x) / 2 + offX, y: (start.y + end.y) / 2 + offY };
+    const obstacles = [];
+    for (const state of this.automaton.states) {
+      const p = this.positionOf(state);
+      if (state !== record.source && state !== record.target) {
+        obstacles.push({ x: p.x, y: p.y, r: STATE_RADIUS + 6 });
+      }
+      if (this.loopStates && this.loopStates.has(state)) {
+        obstacles.push({ x: p.x, y: p.y - STATE_RADIUS - 28, r: 24 });
+      }
+    }
+    let hits = 0;
+    for (const o of obstacles) {
+      for (let i = 0; i <= 20; i++) {
+        const t = i / 20;
+        const a = (1 - t) * (1 - t);
+        const b = 2 * (1 - t) * t;
+        const c = t * t;
+        const x = a * start.x + b * ctrl.x + c * end.x;
+        const y = a * start.y + b * ctrl.y + c * end.y;
+        if (Math.hypot(x - o.x, y - o.y) < o.r) {
+          hits += 1;
+          break;
+        }
+      }
+    }
+    return hits;
   }
 
   renderStates() {
